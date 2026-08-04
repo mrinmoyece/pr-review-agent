@@ -1,0 +1,39 @@
+# Build outputs
+build/
+out/
+target/
+*.class
+
+# Gradle
+.gradle/
+gradle-app.setting
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Env / secrets
+.env
+.env.local
+*.pem
+*.p12
+
+# Dependency scan reports (generated, not source)
+dependency-check-data/
+*.jar
+bin/
