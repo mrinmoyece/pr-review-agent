@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<!--
+  Lenient, advisory ruleset (see build.gradle.kts: ignoreFailures = true).
+  Goal: surface real code-smell signal without blocking CI on a retrofit
+  pass over an existing codebase. Tighten to isIgnoreFailures = false once
+  a clean baseline is established.
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="warning"/>
+
+    <module name="TreeWalker">
+        <module name="UnusedImports"/>
+        <module name="RedundantImport"/>
+        <module name="EqualsHashCode"/>
+        <module name="EmptyCatchBlock"/>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <module name="ConstantName"/>
+        <module name="MissingSwitchDefault"/>
+        <module name="LineLength">
+            <property name="max" value="160"/>
+            <property name="severity" value="info"/>
+        </module>
+    </module>
+</module>
