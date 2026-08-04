@@ -1,0 +1,87 @@
+spring:
+  application:
+    name: pr-review-agent
+  threads:
+    virtual:
+      enabled: true    # Java 21 virtual threads — improves throughput under load
+
+server:
+  port: 8080
+
+# ── LLM Provider ────────────────────────────────────────────────────────────
+llm:
+  provider: ${LLM_PROVIDER:github_models}
+  chat-deployment: ${AZURE_CHAT_DEPLOYMENT:gpt-4o}
+
+azure:
+  openai:
+    endpoint: ${AZURE_OPENAI_ENDPOINT:}
+    key: ${AZURE_OPENAI_API_KEY:}
+
+github:
+  token: ${GITHUB_TOKEN:}
+  webhook:
+    secret: ${GITHUB_WEBHOOK_SECRET:dev-secret-change-in-prod}
+  models:
+    endpoint: ${GITHUB_MODELS_ENDPOINT:https://models.inference.ai.azure.com}
+
+# ── Resilience4j ─────────────────────────────────────────────────────────────
+resilience4j:
+  retry:
+    instances:
+      github:
+        max-attempts: 3
+        wait-duration: 2s
+        retry-exceptions:
+          - org.springframework.web.client.RestClientResponseException
+      llm:
+        max-attempts: 3
+        wait-duration: 5s
+        exponential-backoff-multiplier: 2
+  circuitbreaker:
+    instances:
+      github:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+      llm:
+        sliding-window-size: 5
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 60s
+      jira:
+        sliding-window-size: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+
+# ── Jira integration (optional — leave blank to disable) ─────────────────────
+jira:
+  base-url: ${JIRA_BASE_URL:}
+  token: ${JIRA_TOKEN:}
+  user-email: ${JIRA_USER_EMAIL:}
+
+# ── Review history ────────────────────────────────────────────────────────────
+review:
+  history:
+    pr-count: ${REVIEW_HISTORY_PR_COUNT:20}
+
+# ── Async thread pool ──────────────────────────────────────────────────────
+spring.task.execution:
+  pool:
+    core-size: 4
+    max-size: 16
+    queue-capacity: 100
+  thread-name-prefix: pr-review-
+
+# ── Actuator ──────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}

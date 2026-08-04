@@ -1,0 +1,5 @@
+# Development profile — verbose logging, no real webhook secret enforcement
+logging:
+  level:
+    com.agentforge: DEBUG
+    org.springframework.web: DEBUG

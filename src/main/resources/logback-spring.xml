@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- JSON structured logging for production (Datadog/Splunk/ELK) -->
+    <springProfile name="!dev">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+                <includeMdcKeyName>spanId</includeMdcKeyName>
+                <includeMdcKeyName>service</includeMdcKeyName>
+                <customFields>{"app":"${spring.application.name:-app}","env":"${ENV:-prod}"}</customFields>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+        <logger name="com.agentforge" level="INFO"/>
+        <logger name="org.springframework" level="WARN"/>
+        <logger name="io.github.resilience4j" level="WARN"/>
+    </springProfile>
+
+    <!-- Human-readable logging for development -->
+    <springProfile name="dev">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss} %highlight(%-5level) [%cyan(%logger{20})] - %msg%n</pattern>
+            </encoder>
+        </appender>
+        <root level="DEBUG">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+        <logger name="com.agentforge" level="DEBUG"/>
+        <logger name="org.springframework" level="INFO"/>
+        <logger name="org.mongodb" level="WARN"/>
+    </springProfile>
+</configuration>
