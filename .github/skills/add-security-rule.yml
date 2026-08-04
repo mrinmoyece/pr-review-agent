@@ -1,0 +1,38 @@
+# GitHub Copilot Skill: Add New Security Scan Rule
+name: add-security-rule
+description: >
+  Add a new OWASP security detection rule to the PR Review Agent's SecurityScanTool.
+
+trigger:
+  - "add security rule"
+  - "detect this vulnerability"
+  - "scan for this pattern"
+
+instructions: |
+  Add a new rule to SecurityScanTool.SECURITY_RULES list:
+  
+  ```java
+  new SecurityRule(
+      "RULE_ID",                    // ALL_CAPS_SNAKE_CASE, e.g. "SQL_INJECTION"
+      Pattern.compile("regex"),     // matches the vulnerable pattern
+      CommentSeverity.HIGH,         // CRITICAL | HIGH | MEDIUM | LOW
+      "Plain English description: what the vulnerability is and how to fix it"
+  )
+  ```
+  
+  Then add a unit test in SecurityScanToolTest:
+  ```java
+  @Test void detectsRULE_ID() {
+      String vulnerableCode = "+ vulnerable line here";
+      var issues = tool.scan(List.of(DiffFile.of("Test.java", vulnerableCode)));
+      assertThat(issues).anyMatch(i -> i.getRuleId().equals("RULE_ID"));
+  }
+  
+  @Test void doesNotFalsePositiveOnRULE_ID() {
+      String safeCode = "+ safe equivalent";
+      var issues = tool.scan(List.of(DiffFile.of("Test.java", safeCode)));
+      assertThat(issues).noneMatch(i -> i.getRuleId().equals("RULE_ID"));
+  }
+  ```
+  
+  Rules only scan lines starting with "+" (added lines) — this is intentional.
