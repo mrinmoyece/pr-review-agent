@@ -2,7 +2,7 @@
 
 > AI-powered pull request reviewer for Spring Boot / Java microservices. Detects security vulnerabilities, architecture violations, and performance issues — and posts structured feedback directly to your GitHub PRs.
 
-[![CI](https://github.com/YOUR-HANDLE/pr-review-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR-HANDLE/pr-review-agent/actions)
+[![CI](https://github.com/mrinmoyece/pr-review-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/mrinmoyece/pr-review-agent/actions)
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
 [![OWASP](https://img.shields.io/badge/OWASP-Top%2010-red)](https://owasp.org/www-project-top-ten/)
 
@@ -65,7 +65,7 @@ and must be fixed before review can proceed.
 
 ```bash
 # Clone and configure
-git clone https://github.com/YOUR-HANDLE/pr-review-agent
+git clone https://github.com/mrinmoyece/pr-review-agent
 cp .env.example .env
 # Edit .env with your tokens
 
@@ -84,7 +84,7 @@ as a GitHub PR review with inline comments.
 
 For local testing without wiring up a real webhook, use the manual trigger endpoint instead:
 ```bash
-curl -X POST "http://localhost:8080/webhook/trigger?repo=YOUR-HANDLE/your-repo&pr=42"
+curl -X POST "http://localhost:8080/webhook/trigger?repo=mrinmoyece/some-repo&pr=42"
 ```
 
 ## Key Design Decisions
