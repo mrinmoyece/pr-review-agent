@@ -85,6 +85,8 @@ secrets or replace the example Kubernetes image with a mutable production tag.
 7. Record the image digest, configuration revision, and operator.
 
 Rollback and incident procedures are canonical in [Operations](operations.md).
+The checked-in Kubernetes manifest contains a zero-digest sentinel and therefore
+fails to pull until deployment automation injects the reviewed release digest.
 
 ## Production acceptance checklist
 

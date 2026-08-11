@@ -66,7 +66,8 @@ management is queried inside the app container in this topology.
 2. Check DNS, network policy, TLS/password configuration, latency, and capacity.
 3. Restore the shared Redis service; do not switch replicas to local stores.
 4. Redeliver failed GitHub events after health is stable.
-5. Verify a repeated delivery receives 409.
+5. Verify an in-progress or successful repeated delivery receives 409. A failed
+   review releases its reservation and may be redelivered.
 
 ### Model rounds fail or truncate
 

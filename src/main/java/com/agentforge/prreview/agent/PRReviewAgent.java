@@ -1,6 +1,7 @@
 package com.agentforge.prreview.agent;
 
 import com.agentforge.prreview.exception.ReviewAgentException;
+import com.agentforge.prreview.model.AdversarialVerificationResult;
 import com.agentforge.prreview.model.AutoFix;
 import com.agentforge.prreview.model.DiffFile;
 import com.agentforge.prreview.model.ReviewComment;
@@ -135,24 +136,27 @@ public class PRReviewAgent {
             List<ReviewComment> commentsBeforeVerification = new ArrayList<>(staticComments);
             rounds.forEach(round -> commentsBeforeVerification.addAll(round.getComments()));
 
-            ReviewRoundResult verification = llmReviewTool.review(
-                    ReviewPass.ADVERSARIAL_VERIFICATION,
-                    changedFiles,
-                    deduplicate(commentsBeforeVerification),
-                    teamPatterns);
-            rounds.add(verification);
+            List<ReviewComment> specialistComments = rounds.stream()
+                    .flatMap(round -> round.getComments().stream())
+                    .toList();
+            AdversarialVerificationResult verification = llmReviewTool.verify(
+                    changedFiles, deduplicate(specialistComments), teamPatterns);
+            rounds.add(verification.getRound());
 
-            List<ReviewComment> allComments = new ArrayList<>(commentsBeforeVerification);
-            allComments.addAll(verification.getComments());
+            List<ReviewComment> allComments = new ArrayList<>(staticComments);
+            allComments.addAll(verification.getConfirmedComments());
+            allComments.addAll(verification.getRound().getComments());
             allComments = deduplicate(allComments);
 
             boolean reviewComplete = rounds.stream()
                     .allMatch(round -> round.getStatus() == ReviewRoundResult.RoundStatus.COMPLETE);
             ReviewResult.ReviewVerdict verdict = determineVerdict(allComments, reviewComplete);
             int score = calculateScore(allComments);
-            List<AutoFix> autoFixes = reviewComplete
-                    ? gitHubAutoFixTool.applyFixes(repoFullName, headBranch, allComments)
-                    : List.of();
+            List<AutoFix> autoFixes = List.of();
+            if (reviewComplete) {
+                gitHubAutoFixTool.authorizeEligible(allComments);
+                autoFixes = gitHubAutoFixTool.applyFixes(repoFullName, headBranch, allComments);
+            }
 
             ReviewResult result = ReviewResult.builder()
                     .repositoryFullName(repoFullName)

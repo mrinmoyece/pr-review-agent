@@ -65,7 +65,7 @@ public class GitHubAutoFixTool {
                         && (c.getSeverity() == ReviewComment.CommentSeverity.LOW
                             || c.getSeverity() == ReviewComment.CommentSeverity.MEDIUM)
                         && c.getFilename() != null
-                        && !isSensitivePath(c.getFilename()))
+                        && isAllowedSourcePath(c.getFilename()))
                 .toList();
 
         if (eligible.isEmpty()) {
@@ -102,6 +102,22 @@ public class GitHubAutoFixTool {
                 applied.stream().filter(f -> !f.isApplied()).count());
 
         return applied;
+    }
+
+    /**
+     * Applies the trusted write policy after review verification. Model-provided
+     * auto-fix flags and snippets are never used as authorization.
+     */
+    public void authorizeEligible(List<ReviewComment> comments) {
+        for (ReviewComment comment : comments) {
+            boolean eligible = comment.getSeverity() == ReviewComment.CommentSeverity.LOW
+                    && comment.getCategory() == ReviewComment.CommentCategory.STYLE
+                    && comment.getLineNumber() != null
+                    && comment.getFilename() != null
+                    && isAllowedSourcePath(comment.getFilename());
+            comment.setAutoFixable(eligible);
+            comment.setSuggestedFix(null);
+        }
     }
 
     @Retry(name = "github")
@@ -164,8 +180,8 @@ public class GitHubAutoFixTool {
         options.setMaxTokens(4096);
         options.setTemperature(0.1);
 
-        String fixedContent = openAIClient.getChatCompletions(deployment, options)
-                .getChoices().get(0).getMessage().getContent().strip();
+        ChatCompletions completions = openAIClient.getChatCompletions(deployment, options);
+        String fixedContent = completedContent(completions);
 
         // Step 3: Commit the fix to the branch
         String commitMessage = "fix(review-agent): auto-fix %d style issue(s) in %s".formatted(
@@ -204,16 +220,27 @@ public class GitHubAutoFixTool {
         return AutoFix.skipped(filename, "GitHub API unavailable: " + t.getMessage());
     }
 
-    private boolean isSensitivePath(String filename) {
-        String normalized = filename.replace('\\', '/').toLowerCase(Locale.ROOT);
-        return normalized.startsWith("/")
-                || normalized.contains("../")
-                || normalized.startsWith(".github/")
-                || normalized.startsWith("k8s/")
-                || normalized.equals("dockerfile")
-                || normalized.equals("build.gradle.kts")
-                || normalized.equals("settings.gradle.kts")
-                || normalized.endsWith(".gradle")
-                || normalized.endsWith(".gradle.kts");
+    private boolean isAllowedSourcePath(String filename) {
+        String normalized = filename.replace('\\', '/');
+        return !normalized.startsWith("/")
+                && !normalized.contains("../")
+                && (normalized.startsWith("src/main/java/")
+                    || normalized.startsWith("src/test/java/"))
+                && normalized.endsWith(".java");
+    }
+
+    String completedContent(ChatCompletions completions) {
+        if (completions == null || completions.getChoices() == null
+                || completions.getChoices().isEmpty()
+                || completions.getChoices().get(0).getMessage() == null
+                || completions.getChoices().get(0).getFinishReason()
+                != CompletionsFinishReason.STOPPED) {
+            throw new IllegalStateException("Auto-fix model response was incomplete");
+        }
+        String content = completions.getChoices().get(0).getMessage().getContent();
+        if (content == null || content.isBlank()) {
+            throw new IllegalStateException("Auto-fix model returned no file content");
+        }
+        return content.strip();
     }
 }

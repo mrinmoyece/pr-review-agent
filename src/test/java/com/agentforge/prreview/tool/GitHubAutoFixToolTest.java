@@ -3,6 +3,10 @@ package com.agentforge.prreview.tool;
 import com.agentforge.prreview.model.AutoFix;
 import com.agentforge.prreview.model.ReviewComment;
 import com.azure.ai.openai.OpenAIClient;
+import com.azure.ai.openai.models.ChatChoice;
+import com.azure.ai.openai.models.ChatCompletions;
+import com.azure.ai.openai.models.ChatResponseMessage;
+import com.azure.ai.openai.models.CompletionsFinishReason;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,7 +16,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class GitHubAutoFixToolTest {
 
@@ -81,6 +87,20 @@ class GitHubAutoFixToolTest {
     }
 
     @Test
+    void trustedPolicyIgnoresModelFlagAndAuthorizesOnlyAnchoredLowStyleFindings() {
+        ReviewComment eligible = comment(ReviewComment.CommentSeverity.LOW, false);
+        eligible.setLineNumber(10);
+        ReviewComment wrongCategory = comment(ReviewComment.CommentSeverity.LOW, true);
+        wrongCategory.setCategory(ReviewComment.CommentCategory.CORRECTNESS);
+        wrongCategory.setLineNumber(10);
+
+        tool.authorizeEligible(List.of(eligible, wrongCategory));
+
+        assertThat(eligible.isAutoFixable()).isTrue();
+        assertThat(wrongCategory.isAutoFixable()).isFalse();
+    }
+
+    @Test
     void givenAutoFixDisabled_whenApplyFixes_thenReturnsEmptyList() {
         ReflectionTestUtils.setField(tool, "autoFixEnabled", false);
 
@@ -102,26 +122,76 @@ class GitHubAutoFixToolTest {
     }
 
     @Test
+    void givenDeploymentOrNestedDockerPath_whenApplyFixes_thenReturnsEmptyList() {
+        List<AutoFix> result = tool.applyFixes(
+                "org/repo", "feature-branch",
+                List.of(
+                        comment(ReviewComment.CommentSeverity.LOW, true,
+                                "docker-compose.yml"),
+                        comment(ReviewComment.CommentSeverity.LOW, true,
+                                "services/api/Dockerfile"),
+                        comment(ReviewComment.CommentSeverity.LOW, true,
+                                "charts/app/templates/deployment.yaml")));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void givenNonJavaSourcePath_whenApplyFixes_thenReturnsEmptyList() {
+        List<AutoFix> result = tool.applyFixes(
+                "org/repo", "feature-branch",
+                List.of(comment(ReviewComment.CommentSeverity.LOW, true,
+                        "src/main/resources/application.yml")));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void givenCaseMismatchedSourceRoot_whenApplyFixes_thenReturnsEmptyList() {
+        List<AutoFix> result = tool.applyFixes(
+                "org/repo", "feature-branch",
+                List.of(comment(ReviewComment.CommentSeverity.LOW, true,
+                        "SRC/MAIN/JAVA/Foo.java")));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void tokenLimitedAutoFixResponseIsRejected() {
+        ChatCompletions completions = mock(ChatCompletions.class);
+        ChatChoice choice = mock(ChatChoice.class);
+        ChatResponseMessage message = mock(ChatResponseMessage.class);
+        when(completions.getChoices()).thenReturn(List.of(choice));
+        when(choice.getMessage()).thenReturn(message);
+        when(choice.getFinishReason()).thenReturn(CompletionsFinishReason.TOKEN_LIMIT_REACHED);
+        when(message.getContent()).thenReturn("partial");
+
+        assertThatThrownBy(() -> tool.completedContent(completions))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("incomplete");
+    }
+
+    @Test
     void givenMultipleLowCommentsOnSameFile_whenApplyFixes_thenGroupedIntoSingleEntry() {
         // Both LOW comments on the same file should produce one AutoFix entry
         // (either committed or skipped — here they'll be skipped since GitHub REST is mocked)
         List<ReviewComment> comments = List.of(
-                comment(ReviewComment.CommentSeverity.LOW, true, "src/Foo.java"),
-                comment(ReviewComment.CommentSeverity.LOW, true, "src/Foo.java")
+                comment(ReviewComment.CommentSeverity.LOW, true, "src/main/java/Foo.java"),
+                comment(ReviewComment.CommentSeverity.LOW, true, "src/main/java/Foo.java")
         );
 
         List<AutoFix> result = tool.applyFixes("org/repo", "feature-branch", comments);
 
         // One entry per file, not one entry per comment
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getFilename()).isEqualTo("src/Foo.java");
+        assertThat(result.get(0).getFilename()).isEqualTo("src/main/java/Foo.java");
     }
 
     @Test
     void givenMultipleLowCommentsOnDifferentFiles_whenApplyFixes_thenOneEntryPerFile() {
         List<ReviewComment> comments = List.of(
-                comment(ReviewComment.CommentSeverity.LOW, true, "src/Foo.java"),
-                comment(ReviewComment.CommentSeverity.LOW, true, "src/Bar.java")
+                comment(ReviewComment.CommentSeverity.LOW, true, "src/main/java/Foo.java"),
+                comment(ReviewComment.CommentSeverity.LOW, true, "src/main/java/Bar.java")
         );
 
         List<AutoFix> result = tool.applyFixes("org/repo", "feature-branch", comments);

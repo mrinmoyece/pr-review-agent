@@ -12,10 +12,14 @@ input and output also create cost, latency, and denial-of-service risk.
 ## Decision
 
 Run deterministic scans first, then six focused specialist passes in parallel,
-followed by one adversarial verification pass over the aggregate. Bound diff
-characters, chunk size, output tokens, and findings. Record every round's model,
-status, chunk count, details, and findings. Any failed, truncated, or capped
-round prevents approval.
+followed by one adversarial verification pass over the aggregate. The verifier
+always inspects the diff, even when specialists return no candidates, and must
+explicitly confirm or reject every candidate; rejected findings do not affect
+the verdict. If verification cannot inspect complete evidence or fails,
+candidates remain visible and the review is incomplete. Bound diff
+characters, chunk size, chunk count, output tokens, and findings. Record every
+round's model, status, chunk count, details, and findings. Any failed, truncated,
+or capped round prevents approval.
 
 ## Alternatives
 

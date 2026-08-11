@@ -12,8 +12,10 @@ on restart.
 ## Decision
 
 Require a GitHub delivery ID and reserve it through Redis using an atomic insert
-with expiry. Every replica uses the same store. If reservation cannot be
-verified, reject processing rather than bypassing replay protection.
+with expiry. Every replica uses the same store. Retain the reservation while
+processing and after success; release it if asynchronous processing fails so a
+redelivery can retry transient failure. If reservation cannot be verified,
+reject processing rather than bypassing replay protection.
 
 ## Alternatives
 
@@ -26,8 +28,9 @@ verified, reject processing rather than bypassing replay protection.
 ## Consequences
 
 Redis becomes an availability dependency for webhook acceptance. Expiry bounds
-storage while covering the configured replay window. Operators must restore
-Redis and redeliver failed events after outages.
+storage while covering the configured replay window. Failed work is retryable,
+but a crash before the failure callback may retain the reservation until expiry;
+operators must restore Redis and redeliver failed events after outages.
 
 ## Evidence
 

@@ -41,12 +41,12 @@ flowchart LR
 | Threat | Primary controls | Residual risk |
 |---|---|---|
 | Forged webhook | HMAC verification, constant-time comparison, payload cap | Secret compromise permits forgery until rotation |
-| Replay or duplicate delivery | Required delivery ID, Redis atomic insert with expiry | Redis loss can reject legitimate events because processing fails closed |
+| Replay or duplicate delivery | Required delivery ID, Redis atomic insert with expiry, failed-work release | Redis loss can reject legitimate events because processing fails closed |
 | Cross-repository abuse | Explicit repository allowlist | Misconfigured allowlist broadens scope |
 | Prompt injection | Random trust markers, system instructions, no model tool execution | A model can still produce plausible but incorrect findings |
 | Malformed or fabricated findings | JSON parsing, changed-file validation, added-line anchoring, length and count caps | General findings without a line still require human judgment |
-| Incomplete review presented as approval | Per-round status and completeness gate | GitHub policy must require the review/check expected by the organization |
-| Unauthorized writes | Auto-fix off by default, fork protection, sensitive-path denylist, least-privilege token | Enabling write permission increases blast radius |
+| Incomplete review presented as approval | Per-round status, hunkless/binary-change detection, adversarial empty-result review, completeness gate | GitHub policy must require the review/check expected by the organization |
+| Unauthorized writes | Model write flags discarded, trusted low-style eligibility policy, auto-fix off by default, fork/unknown-head protection, Java source allowlist, least-privilege token | Enabling write permission increases blast radius |
 | Secret leakage through logs/prompts | Separate credentials, bounded data, log sanitization, secret scanning | Source diffs are sent to the configured model provider |
 | Resource exhaustion | Request cap, diff/chunk/finding/token budgets, bounded executors | Many allowed repositories can still create sustained load |
 | Supply-chain compromise | Action SHA enforcement/allowlist, Gradle checksums, CodeQL, Gitleaks, Trivy, SBOM | A trusted pinned artifact may later be discovered vulnerable |

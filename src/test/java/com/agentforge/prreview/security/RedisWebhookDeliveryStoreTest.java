@@ -10,17 +10,19 @@ import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RedisWebhookDeliveryStoreTest {
 
     private ValueOperations<String, String> valueOperations;
+    private StringRedisTemplate redisTemplate;
     private RedisWebhookDeliveryStore store;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        redisTemplate = mock(StringRedisTemplate.class);
         valueOperations = mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         store = new RedisWebhookDeliveryStore(redisTemplate);
@@ -43,5 +45,12 @@ class RedisWebhookDeliveryStoreTest {
                 .thenReturn(false);
 
         assertThat(store.recordIfNew("delivery-1")).isFalse();
+    }
+
+    @Test
+    void failedDeliveryCanBeReleasedForRedelivery() {
+        store.release("delivery-1");
+
+        verify(redisTemplate).delete("pr-review:webhook-delivery:delivery-1");
     }
 }

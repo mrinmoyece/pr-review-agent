@@ -48,7 +48,7 @@ Field rules:
 - `severity`: one of `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO` (exact uppercase string, no other values). Use `CRITICAL` only for issues that could cause a data breach, data loss, or full service outage.
 - `title`: a short, specific phrase (under 80 characters).
 - `body`: 1-4 sentences. Explain the risk/impact and suggest a concrete fix. Include a short code snippet only if it materially clarifies the fix.
-- `autoFixable`: `true` only if the fix is mechanical and unambiguous (e.g. a simple rename or null-check addition); otherwise `false`.
+- `autoFixable`: always `false`. Model output is untrusted and cannot authorize repository writes.
 
 If there are no new issues to report, respond with exactly: `[]`
 

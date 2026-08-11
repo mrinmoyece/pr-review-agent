@@ -61,10 +61,18 @@ The system combines deterministic controls with model-output validation:
 3. Every model request wraps attacker-controlled content in a randomized marker
    and explicitly classifies it as data.
 4. Parsed findings must satisfy the output schema, target a changed file, and
-   use an added diff line for an inline anchor.
-5. Chunk, total-diff, output-token, and finding limits bound model work.
-6. Auto-fix is off by default and denies security-sensitive repository paths.
-7. Incomplete model coverage can produce only `COMMENT`, never `APPROVE`.
+   use an added diff line for an inline anchor. Model-provided write eligibility
+   and suggested fixes are discarded.
+5. Chunk size, chunk count, total-diff, output-token, and finding limits bound
+   model work.
+6. Auto-fix is off by default. Trusted application policy can authorize only
+   verified, anchored, low-severity style findings for Java files under
+   `src/main/java` or `src/test/java`; model flags and snippets grant no authority.
+7. Adversarial verification explicitly confirms or rejects every specialist
+   finding and independently searches for misses even when specialists found
+   nothing; rejected claims cannot affect the verdict. Verification failure
+   retains candidates as unverified risk and marks coverage incomplete.
+8. Incomplete model coverage can produce only `COMMENT`, never `APPROVE`.
 
 Evidence:
 

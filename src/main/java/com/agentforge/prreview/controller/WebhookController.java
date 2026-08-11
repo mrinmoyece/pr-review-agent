@@ -94,11 +94,6 @@ public class WebhookController {
                     .body(Map.of("error", "Invalid signature"));
         }
 
-        if (deliveryId.isBlank() || !webhookDeliveryStore.recordIfNew(deliveryId)) {
-            log.warn("Duplicate or missing webhook delivery ID");
-            return ResponseEntity.status(409).body(Map.of("error", "Duplicate delivery"));
-        }
-
         if (!"pull_request".equals(event)) {
             log.debug("Ignoring event type: {}", event);
             return ResponseEntity.ok(Map.of("status", "ignored", "event", event));
@@ -142,22 +137,34 @@ public class WebhookController {
                 root.path("pull_request").path("head").path("repo"), "full_name");
         String prTitle = textOrNull(root.path("pull_request"), "title");
         String prBody = textOrNull(root.path("pull_request"), "body");
-        boolean forkPullRequest = headRepository != null && !repo.equals(headRepository);
+        boolean sameRepositoryPullRequest = repo.equals(headRepository);
 
         if (prNumber < 1) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid PR number in payload"));
         }
+        if (deliveryId.isBlank() || !webhookDeliveryStore.recordIfNew(deliveryId)) {
+            log.warn("Duplicate or missing webhook delivery ID");
+            return ResponseEntity.status(409).body(Map.of("error", "Duplicate delivery"));
+        }
 
         log.info("PR {} #{} received - triggering review", repo, prNumber);
 
-        CompletableFuture<ReviewResult> future = prReviewAgent.review(repo, prNumber,
-                !forkPullRequest && headBranch != null ? headBranch : "",
-                prTitle != null ? prTitle : "",
-                prBody != null ? prBody : "");
-        future.exceptionally(ex -> {
-            log.error("Review failed for {}/#{}: {}", repo, prNumber, ex.getMessage(), ex);
-            return null;
-        });
+        try {
+            CompletableFuture<ReviewResult> future = prReviewAgent.review(repo, prNumber,
+                    sameRepositoryPullRequest && headBranch != null ? headBranch : "",
+                    prTitle != null ? prTitle : "",
+                    prBody != null ? prBody : "");
+            future.whenComplete((result, failure) -> {
+                if (failure != null) {
+                    log.error("Review failed for {}/#{}: {}",
+                            repo, prNumber, failure.getMessage(), failure);
+                    releaseFailedDelivery(deliveryId);
+                }
+            });
+        } catch (RuntimeException e) {
+            releaseFailedDelivery(deliveryId);
+            throw e;
+        }
 
         return ResponseEntity.accepted()
                 .body(Map.of("status", "review_triggered", "pr", prNumber + ""));
@@ -223,5 +230,14 @@ public class WebhookController {
         if (node == null || node.isMissingNode()) return null;
         JsonNode value = node.get(field);
         return (value == null || value.isNull()) ? null : value.asText();
+    }
+
+    private void releaseFailedDelivery(String deliveryId) {
+        try {
+            webhookDeliveryStore.release(deliveryId);
+        } catch (RuntimeException releaseFailure) {
+            log.error("Could not release failed webhook delivery {}: {}",
+                    deliveryId, releaseFailure.getMessage(), releaseFailure);
+        }
     }
 }

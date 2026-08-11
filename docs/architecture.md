@@ -61,8 +61,9 @@ sequenceDiagram
 ```
 
 The webhook acknowledges accepted work before review completion. GitHub delivery
-retries are deduplicated in Redis. A review failure is logged and surfaced as a
-failed asynchronous operation; it is never converted into an approval.
+retries are deduplicated in Redis while work is active and after success. A
+failed asynchronous review releases its reservation so a GitHub redelivery can
+retry it; failure is never converted into an approval.
 
 ## Components
 
@@ -74,7 +75,7 @@ failed asynchronous operation; it is never converted into an approval.
 | Deterministic scan tools | Security, architecture, and performance evidence |
 | `ReviewHistoryTool` | Bounded repository-specific advisory context |
 | `LLMReviewTool` | Specialist calls, chunking, validation, and retries |
-| `GitHubAutoFixTool` | Opt-in, restricted write path |
+| `GitHubAutoFixTool` | Opt-in write path limited to trusted deterministic eligibility and Java source roots |
 | `GitHubCommentTool` | Review and coverage publication |
 | `RedisWebhookDeliveryStore` | Cross-replica replay protection |
 
@@ -106,7 +107,9 @@ Outer reviews use `reviewExecutor`; inner static and specialist work uses
 `reviewFanOutExecutor`. Separate bounded pools avoid nested-pool starvation.
 Adversarial verification remains sequential because it consumes the specialist
 aggregate. Model calls have retry limits, diff and finding budgets, and explicit
-incomplete states.
+incomplete states. Chunk-count limits bound request fan-out, and continuation
+chunks carry adjusted hunk coordinates. If verification cannot inspect complete
+evidence, candidates remain visible while the round fails closed.
 
 See [ADR-0002](adr/0002-separate-review-executors.md) and
 [Operations](operations.md).

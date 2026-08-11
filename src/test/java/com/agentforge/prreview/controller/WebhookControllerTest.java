@@ -82,6 +82,32 @@ class WebhookControllerTest {
     }
 
     @Test
+    void failedReviewReleasesDeliveryForRedelivery() throws Exception {
+        CompletableFuture<ReviewResult> failure = new CompletableFuture<>();
+        when(reviewAgent.review(anyString(), anyInt(), anyString(), anyString(), anyString()))
+                .thenReturn(failure);
+        String payload = payload(REPOSITORY);
+
+        controller.handleGitHubWebhook(
+                "pull_request", signature(payload), "delivery-failed", payload);
+        failure.completeExceptionally(new IllegalStateException("provider unavailable"));
+
+        verify(deliveryStore).release("delivery-failed");
+    }
+
+    @Test
+    void missingHeadRepositoryDisablesAutoFixBranch() throws Exception {
+        String payload = payload(REPOSITORY).replace(
+                "\"repo\": {\"full_name\": \"%s\"}".formatted(REPOSITORY),
+                "\"repo\": null");
+
+        controller.handleGitHubWebhook(
+                "pull_request", signature(payload), "delivery-deleted-fork", payload);
+
+        verify(reviewAgent).review(REPOSITORY, 42, "", "Improve checks", "Details");
+    }
+
+    @Test
     void manualTriggerIsNotExposedByDefault() {
         var response = controller.manualTrigger("", REPOSITORY, 42);
 

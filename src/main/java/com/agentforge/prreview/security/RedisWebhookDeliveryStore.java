@@ -27,4 +27,9 @@ public class RedisWebhookDeliveryStore implements WebhookDeliveryStore {
                 .setIfAbsent(KEY_PREFIX + deliveryId, "processed", deliveryRetention);
         return Boolean.TRUE.equals(inserted);
     }
+
+    @Override
+    public void release(String deliveryId) {
+        redisTemplate.delete(KEY_PREFIX + deliveryId);
+    }
 }
