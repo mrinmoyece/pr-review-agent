@@ -8,6 +8,8 @@ conversation.
 For the companion implementation of durable graph state, memory strategies,
 evaluation methodology, and performance benchmarks, see the
 [Atlas AI system design case study](https://github.com/mrinmoyece/atlas/blob/main/docs/ai-system-design.md).
+General components and deployment topology are canonical in
+[Architecture](architecture.md).
 
 ## Execution and state lifecycle
 
@@ -73,6 +75,9 @@ Evidence:
 - `src/test/java/com/agentforge/prreview/controller/WebhookControllerTest.java`
 - `src/test/java/com/agentforge/prreview/tool/GitHubAutoFixToolTest.java`
 
+The complete assets, abuse cases, invariants, privacy assumptions, and residual
+risks are canonical in the [Threat model](threat-model.md).
+
 ## Observability and performance
 
 Each review emits structured lifecycle logs and exposes Spring Boot actuator and
@@ -94,18 +99,16 @@ Evidence:
 - `src/main/resources/application.yml`
 - `observability/prometheus.yml`
 
+Operational indicators, initial objective guidance, and runbooks are canonical
+in [Operations](operations.md).
+
 ## Evaluation approach
 
-The repository currently evaluates deterministic behavior and safety
-properties, not subjective LLM quality. Unit and concurrency tests cover static
-findings, webhook authentication, replay rejection, write restrictions, and
-executor progress. CI adds Checkstyle, SpotBugs, CodeQL, dependency review,
-Gitleaks, and Trivy.
-
-This distinction is deliberate: the project can claim strong guardrail and
-orchestration evidence, but it does not yet claim a calibrated review-quality
-benchmark. Atlas provides the portfolio's dataset-driven evaluation, memory A/B,
-and performance evidence.
+The repository evaluates deterministic behavior and safety properties, not
+subjective LLM quality. The canonical gates, commands, safety properties, and
+future benchmark requirements are in [Evaluation](evaluation.md). Atlas
+provides the portfolio's dataset-driven evaluation, memory A/B, and performance
+evidence.
 
 ## Competency evidence
 
@@ -118,7 +121,7 @@ and performance evidence.
 | Observability | Structured logs, actuator metrics, Prometheus, auditable rounds | No token or cost telemetry |
 | Performance | Parallel specialists, isolated bounded pools, chunk and finding budgets, caching | Strong, with concurrency regression coverage |
 
-## Known limitations
+## Limitations and next evidence
 
 - Review state is not resumable after process termination.
 - Model token usage, cost, and per-pass latency are not recorded.
@@ -129,3 +132,8 @@ and performance evidence.
 These are explicit boundaries rather than hidden claims. Atlas is the portfolio
 surface for stateful memory and evaluation; this project specializes in secure,
 bounded multi-agent review orchestration.
+
+Priorities for stronger evidence are custom per-round latency/token/cost
+telemetry, a versioned labeled PR corpus, resumable review state with idempotent
+publication, and calibrated quality thresholds. Each requires an ADR and
+evaluation plan before implementation.

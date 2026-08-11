@@ -1,0 +1,40 @@
+# ADR-0001: Bounded multi-agent review
+
+- Status: accepted
+- Decision owners: maintainers
+
+## Context
+
+A single holistic model call provides poor failure isolation, weak coverage
+evidence, and no independent challenge of plausible findings. Unbounded review
+input and output also create cost, latency, and denial-of-service risk.
+
+## Decision
+
+Run deterministic scans first, then six focused specialist passes in parallel,
+followed by one adversarial verification pass over the aggregate. Bound diff
+characters, chunk size, output tokens, and findings. Record every round's model,
+status, chunk count, details, and findings. Any failed, truncated, or capped
+round prevents approval.
+
+## Alternatives
+
+- **One holistic call:** simpler and cheaper to operate, but provides weaker
+  coverage attribution and challenge.
+- **Unbounded autonomous agents:** flexible, but inappropriate for untrusted PR
+  input and predictable CI cost.
+- **Deterministic checks only:** reliable but unable to assess broader semantic
+  correctness and architecture.
+
+## Consequences
+
+The design increases model calls and orchestration complexity. In exchange,
+review coverage is visible, specialist failures are isolated, and incomplete
+work has safe verdict semantics.
+
+## Evidence
+
+- `PRReviewAgent`
+- `LLMReviewTool`
+- `ReviewRoundResult`
+- `ReviewExecutionConfigTest`

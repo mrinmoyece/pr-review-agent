@@ -22,23 +22,9 @@ adversarial verification round.
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│       GitHub PR Event (opened / synchronize / reopened)  │
-└─────────────────────────┬────────────────────────────────┘
-                          │
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│                    PRReviewAgent                         │
-│                                                          │
-│  Tool 1: GitHubDiffTool    ── fetch & parse PR diff      │
-│  Tool 2: SecurityScanTool  ── OWASP pattern matching     │
-│  Tool 3: ArchCheckTool     ── Spring Boot patterns       │
-│  Tool 4: PerfAnalysisTool  ── N+1, sync, memory         │
-│  Tool 5: LLMReviewTool     ── parallel specialists       │
-│  Tool 6: GitHubCommentTool ── post structured feedback   │
-└──────────────────────────────────────────────────────────┘
-```
+See [Architecture](docs/architecture.md) for system context, trust boundaries,
+component responsibilities, state, concurrency, failure semantics, and
+deployment topology.
 
 ## AI System Design
 
@@ -82,14 +68,18 @@ and must be fixed before review can proceed.
 ```bash
 # Clone and configure
 git clone https://github.com/mrinmoyece/pr-review-agent
+cd pr-review-agent
 cp .env.example .env
 # Set separate GitHub API and model credentials, a 32+ byte webhook secret,
 # and GITHUB_REPOSITORY_ALLOWLIST.
 
-# Run (Azure OpenAI — production)
+# Start the required replay store
+docker compose up -d redis
+
+# Run (Azure OpenAI - production)
 ./gradlew bootRun
 
-# Run (GitHub Models — free dev mode)
+# Run (GitHub Models - free dev mode)
 ./gradlew bootRun --args="--spring.profiles.active=dev"
 ```
 
@@ -119,7 +109,11 @@ treated as untrusted. Findings are schema-validated and constrained to changed
 files. Repository access is default-deny, webhook deliveries are authenticated
 and deduplicated, and auto-fix is disabled unless explicitly enabled.
 
-**Score-based verdict** — Rather than a binary approve/reject, every review produces a 0–100 score. Teams can configure their own threshold: block merges below 70, warn below 85.
+**Severity and completeness verdict** — Critical or high findings request
+changes; incomplete coverage and advisory findings produce a comment; only a
+complete review without findings approves. The 0-100 score summarizes severity
+but does not override those safety rules. See
+[Architecture](docs/architecture.md#verdict-semantics).
 
 **Dual LLM support** — Azure OpenAI in CI/CD pipelines, GitHub Models for local dev and open source contributors.
 
@@ -141,3 +135,16 @@ See [Enterprise deployment](docs/enterprise-deployment.md) for least-privilege
 GitHub App permissions, required repository rulesets, secret management,
 network restrictions, and production rollout controls. See [SECURITY.md](SECURITY.md)
 for private vulnerability reporting.
+
+## Documentation
+
+The [documentation index](docs/README.md) is the canonical map:
+
+- [Architecture](docs/architecture.md)
+- [AI system design](docs/ai-system-design.md)
+- [Threat model](docs/threat-model.md)
+- [Evaluation](docs/evaluation.md)
+- [Operations and SLOs](docs/operations.md)
+- [Enterprise deployment](docs/enterprise-deployment.md)
+- [Architecture decisions](docs/adr/README.md)
+- [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
