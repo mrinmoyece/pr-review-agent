@@ -34,6 +34,10 @@ secret scanning, push protection, validity checks, and non-provider patterns
 where the GitHub plan supports them. Restrict Actions to trusted actions and
 require actions to be pinned to full commit SHAs.
 
+Publish release artifacts only through the `production` environment, restrict
+that environment to protected branches, and require independent deployment
+reviewers when at least two administrators are available.
+
 ## Runtime controls
 
 Deploy the container by immutable digest. Keep the management port internal,
