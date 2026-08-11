@@ -35,6 +35,7 @@ repositories {
 val azureOpenAiVersion = "1.0.0-beta.16"
 val resilience4jVersion = "2.4.0"
 extra["commons-lang3.version"] = "3.20.0"
+extra["jackson-bom.version"] = "2.21.5"
 extra["netty.version"] = "4.1.136.Final"
 
 dependencies {

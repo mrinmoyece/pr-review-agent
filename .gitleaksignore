@@ -1,0 +1,2 @@
+# Synthetic webhook test fixture from the original feature commit.
+84404a159882db063a94c0cafb83c834f658bf2b:src/test/java/com/agentforge/prreview/controller/WebhookControllerTest.java:generic-api-key:27

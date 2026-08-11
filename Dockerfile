@@ -15,17 +15,15 @@ COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-jammy@sha256:3097cbbebb7d490494a98aed2301f284b38f79eba158eef098c6fc8c8af11c23 AS runtime
+FROM eclipse-temurin:21-jre-alpine@sha256:3f08b13888f595cc49edabea7250ba69499ba25602b267da591720769400e08c AS runtime
 
 LABEL org.opencontainers.image.title="pr-review-agent"
 LABEL org.opencontainers.image.description="AI-powered GitHub PR review agent"
 LABEL org.opencontainers.image.vendor="AgentForge"
 
-RUN groupadd --gid 1001 appgroup \
- && useradd  --uid 1001 --gid appgroup --no-create-home appuser \
- && apt-get update \
- && apt-get install --yes --no-install-recommends curl \
- && rm -rf /var/lib/apt/lists/*
+RUN addgroup -g 1001 -S appgroup \
+ && adduser -u 1001 -S -D -H -G appgroup appuser \
+ && apk add --no-cache curl
 
 WORKDIR /app
 
