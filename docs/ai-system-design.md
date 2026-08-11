@@ -1,0 +1,131 @@
+# AI system design
+
+The PR Review Agent is a bounded, event-driven LLM system. It is intentionally
+not a conversational agent: each signed webhook starts an isolated review, and
+the system publishes an auditable result rather than retaining an open-ended
+conversation.
+
+For the companion implementation of durable graph state, memory strategies,
+evaluation methodology, and performance benchmarks, see the
+[Atlas AI system design case study](https://github.com/mrinmoyece/atlas/blob/main/docs/ai-system-design.md).
+
+## Execution and state lifecycle
+
+```mermaid
+flowchart LR
+    A[Signed GitHub webhook] --> B[Repository and replay checks]
+    B --> C[Fetch and parse diff]
+    C --> D[Deterministic scans]
+    C --> E[Review history cache]
+    D --> F[Six specialist passes]
+    E --> F
+    F --> G[Adversarial verification]
+    G --> H[Validate and deduplicate]
+    H --> I{Every round complete?}
+    I -- no --> J[Comment only]
+    I -- yes --> K[Score and verdict]
+    J --> L[GitHub review]
+    K --> L
+```
+
+`PRReviewAgent` owns the per-review state transition from untrusted event to
+published result. Six specialist rounds fan out in parallel, while adversarial
+verification runs after their aggregate is available. `ReviewRoundResult`
+records the pass, model, status, reviewed chunk count, findings, and incomplete
+reason. A failed, truncated, or capped round prevents approval.
+
+Webhook delivery state is separate from model state.
+`RedisWebhookDeliveryStore` uses an atomic, expiring insert so replay protection
+works across replicas and fails closed when Redis is unavailable. Team review
+patterns are advisory context cached per repository for one hour by
+`ReviewHistoryTool`; they are never treated as trusted instructions.
+
+Evidence:
+
+- `src/main/java/com/agentforge/prreview/agent/PRReviewAgent.java`
+- `src/main/java/com/agentforge/prreview/model/ReviewRoundResult.java`
+- `src/main/java/com/agentforge/prreview/security/RedisWebhookDeliveryStore.java`
+- `src/main/java/com/agentforge/prreview/tool/ReviewHistoryTool.java`
+- `src/test/java/com/agentforge/prreview/security/RedisWebhookDeliveryStoreTest.java`
+
+## Guardrails and trust boundaries
+
+The system combines deterministic controls with model-output validation:
+
+1. HMAC verification, payload limits, delivery IDs, and repository allowlisting
+   constrain the webhook boundary.
+2. Static security, architecture, and performance checks provide deterministic
+   evidence before model review.
+3. Every model request wraps attacker-controlled content in a randomized marker
+   and explicitly classifies it as data.
+4. Parsed findings must satisfy the output schema, target a changed file, and
+   use an added diff line for an inline anchor.
+5. Chunk, total-diff, output-token, and finding limits bound model work.
+6. Auto-fix is off by default and denies security-sensitive repository paths.
+7. Incomplete model coverage can produce only `COMMENT`, never `APPROVE`.
+
+Evidence:
+
+- `src/main/java/com/agentforge/prreview/controller/WebhookController.java`
+- `src/main/java/com/agentforge/prreview/tool/LLMReviewTool.java`
+- `src/main/java/com/agentforge/prreview/tool/GitHubAutoFixTool.java`
+- `src/main/resources/prompts/pr-review.md`
+- `src/test/java/com/agentforge/prreview/controller/WebhookControllerTest.java`
+- `src/test/java/com/agentforge/prreview/tool/GitHubAutoFixToolTest.java`
+
+## Observability and performance
+
+Each review emits structured lifecycle logs and exposes Spring Boot actuator and
+Micrometer metrics on the separate management port. Review output also contains
+per-round status, model, chunk count, detail, and findings, making incomplete
+coverage visible to reviewers.
+
+Outer reviews and inner fan-out use separate bounded executors. This avoids the
+nested-pool starvation deadlock reproduced by the concurrency regression test.
+Static analysis, ticket alignment, history loading, and specialist review are
+parallelized; the adversarial pass remains sequential because it depends on the
+earlier aggregate. Diff chunking, finding caps, retries, and a one-hour history
+cache limit latency and model consumption.
+
+Evidence:
+
+- `src/main/java/com/agentforge/prreview/config/ReviewExecutionConfig.java`
+- `src/test/java/com/agentforge/prreview/config/ReviewExecutionConfigTest.java`
+- `src/main/resources/application.yml`
+- `observability/prometheus.yml`
+
+## Evaluation approach
+
+The repository currently evaluates deterministic behavior and safety
+properties, not subjective LLM quality. Unit and concurrency tests cover static
+findings, webhook authentication, replay rejection, write restrictions, and
+executor progress. CI adds Checkstyle, SpotBugs, CodeQL, dependency review,
+Gitleaks, and Trivy.
+
+This distinction is deliberate: the project can claim strong guardrail and
+orchestration evidence, but it does not yet claim a calibrated review-quality
+benchmark. Atlas provides the portfolio's dataset-driven evaluation, memory A/B,
+and performance evidence.
+
+## Competency evidence
+
+| Competency | Evidence in this project | Scope |
+|---|---|---|
+| State management | Explicit review-round state and cross-replica webhook replay state | Strong for event-driven workflows |
+| Memory strategy | Repository-scoped, expiring advisory history cache | Limited; no durable conversational memory |
+| Evaluation | Deterministic safety tests and CI quality gates | No offline LLM-quality benchmark |
+| Guardrails | Layered input, prompt, output, approval, and write controls | Strong |
+| Observability | Structured logs, actuator metrics, Prometheus, auditable rounds | No token or cost telemetry |
+| Performance | Parallel specialists, isolated bounded pools, chunk and finding budgets, caching | Strong, with concurrency regression coverage |
+
+## Known limitations
+
+- Review state is not resumable after process termination.
+- Model token usage, cost, and per-pass latency are not recorded.
+- Team review history is a bounded advisory cache, not a learned memory system.
+- There is no curated PR corpus with precision, recall, false-positive, and
+  reviewer-agreement thresholds.
+
+These are explicit boundaries rather than hidden claims. Atlas is the portfolio
+surface for stateful memory and evaluation; this project specializes in secure,
+bounded multi-agent review orchestration.

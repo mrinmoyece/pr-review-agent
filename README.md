@@ -40,6 +40,19 @@ adversarial verification round.
 └──────────────────────────────────────────────────────────┘
 ```
 
+## AI System Design
+
+This project demonstrates bounded multi-agent orchestration, adversarial
+verification, untrusted-output validation, observable review rounds, and
+concurrency controls. See the [AI system design case study](docs/ai-system-design.md)
+for an evidence matrix and the design's explicit limitations.
+
+[Atlas](https://github.com/mrinmoyece/atlas) is the companion flagship for
+stateful graph execution, memory strategies, evaluation methodology, and
+performance benchmarking. Its
+[AI system design case study](https://github.com/mrinmoyece/atlas/blob/main/docs/ai-system-design.md)
+connects those capabilities to source and measured evidence.
+
 ## Review Output Example
 
 ```markdown
