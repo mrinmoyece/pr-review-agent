@@ -39,7 +39,7 @@ their aggregate output.
 Score 0–100: < 60 = REJECT, 60–79 = REQUEST_CHANGES, 80–89 = APPROVE_WITH_COMMENTS, 90+ = APPROVE
 
 ## Coding Standards
-- Java 21, Spring Boot 3.4.6, constructor injection only
+- Java 21, Spring Boot 3.5.16, constructor injection only
 - `CommentSeverity` and `CommentCategory` enums — always use these, never raw strings
 - Security rules go in `SecurityScanTool` — new rules are regex entries in `SECURITY_RULES` list
 - Only scan lines starting with `+` (added lines) — never flag deleted code

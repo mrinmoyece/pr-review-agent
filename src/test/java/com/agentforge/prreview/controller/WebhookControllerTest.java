@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 
 class WebhookControllerTest {
 
-    private static final String SECRET = "0123456789abcdef0123456789abcdef";
+    private static final String SECRET = "webhook-test-value".repeat(3);
     private static final String REPOSITORY = "org/repo";
 
     private PRReviewAgent reviewAgent;

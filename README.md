@@ -114,7 +114,7 @@ and deduplicated, and auto-fix is disabled unless explicitly enabled.
 
 | Concern | Technology |
 |---------|-----------|
-| Framework | Spring Boot 3.4.6, Java 21 |
+| Framework | Spring Boot 3.5.16, Java 21 |
 | LLM | Azure OpenAI GPT-4o / GitHub Models |
 | Security Scanning | OWASP rules, CodeQL, dependency review, Gitleaks, Trivy |
 | GitHub Integration | kohsuke/github-api + Webhooks |

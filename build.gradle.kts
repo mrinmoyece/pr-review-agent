@@ -2,7 +2,7 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 plugins {
     java
-    id("org.springframework.boot") version "3.4.6"
+    id("org.springframework.boot") version "3.5.16"
     id("io.spring.dependency-management") version "1.1.7"
     id("org.owasp.dependencycheck") version "12.2.2"
     id("com.github.spotbugs") version "6.5.6"
@@ -33,8 +33,9 @@ repositories {
 }
 
 val azureOpenAiVersion = "1.0.0-beta.16"
-val resilience4jVersion = "2.2.0"
+val resilience4jVersion = "2.4.0"
 extra["commons-lang3.version"] = "3.20.0"
+extra["netty.version"] = "4.1.136.Final"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -51,7 +52,8 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-retry:$resilience4jVersion")
 
     implementation("com.fasterxml.jackson.core:jackson-databind")
-    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
+    implementation(platform("tools.jackson:jackson-bom:3.2.1"))
+    implementation("net.logstash.logback:logstash-logback-encoder:9.0")
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("com.github.ben-manes.caffeine:caffeine")
 

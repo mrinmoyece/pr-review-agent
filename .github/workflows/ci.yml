@@ -72,6 +72,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      security-events: write
     steps:
       - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
         with:
@@ -84,17 +85,24 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-      - name: OWASP dependency check
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: ./gradlew dependencyCheckAnalyze --no-daemon
-      - name: Publish dependency report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Build application archive
+        run: ./gradlew bootJar --no-daemon
+      - name: Scan application dependencies
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          name: dependency-check-report
-          path: build/reports/dependency-check-report.*
-          retention-days: 14
+          scan-type: rootfs
+          scan-ref: build/libs
+          scanners: vuln
+          format: sarif
+          output: dependency-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Upload dependency scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3
+        with:
+          sarif_file: dependency-results.sarif
 
   container-scan:
     name: Container Scan

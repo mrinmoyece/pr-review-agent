@@ -6,8 +6,6 @@ Use a GitHub App, not a personal access token. Install it only on approved
 repositories and grant `Contents: read`, `Metadata: read`, and
 `Pull requests: write`. Keep `Contents: write` disabled while auto-fix is off.
 Use a separate inference-only credential for `GITHUB_MODELS_TOKEN`.
-Add an `NVD_API_KEY` Actions secret so the required dependency scan can update
-its vulnerability database reliably without public-feed rate limiting.
 
 Set a random webhook secret of at least 32 bytes and configure
 `GITHUB_REPOSITORY_ALLOWLIST` explicitly. Store all credentials in a managed
