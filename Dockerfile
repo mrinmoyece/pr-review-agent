@@ -23,6 +23,7 @@ LABEL org.opencontainers.image.vendor="AgentForge"
 
 RUN addgroup -g 1001 -S appgroup \
  && adduser -u 1001 -S -D -H -G appgroup appuser \
+ && apk upgrade --no-cache \
  && apk add --no-cache curl
 
 WORKDIR /app
