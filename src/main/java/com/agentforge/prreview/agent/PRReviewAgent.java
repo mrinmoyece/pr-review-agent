@@ -89,7 +89,8 @@ public class PRReviewAgent {
     @Async("reviewExecutor")
     public CompletableFuture<ReviewResult> review(String repoFullName, int prNumber,
                                                    String headBranch, String prTitle, String prBody) {
-        log.info("Starting PR review - {}/#{}", repoFullName, prNumber);
+        String safeRepoFullName = sanitizeForLog(repoFullName);
+        log.info("Starting PR review - {}/#{}", safeRepoFullName, prNumber);
         try {
             if (!allowedRepositories().contains(repoFullName)) {
                 throw new ReviewAgentException("Repository is not in the configured allowlist");
@@ -172,11 +173,18 @@ public class PRReviewAgent {
             log.info("Review posted - verdict={} score={} complete={}", verdict, score, reviewComplete);
             return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
-            log.error("PR review failed for {}/#{}: {}", repoFullName, prNumber, e.getMessage(), e);
+            log.error("PR review failed for {}/#{}: {}", safeRepoFullName, prNumber, e.getMessage(), e);
             throw e instanceof ReviewAgentException reviewException
                     ? reviewException
                     : new ReviewAgentException("PR review failed", e);
         }
+    }
+
+    private String sanitizeForLog(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.replace('\n', '_').replace('\r', '_');
     }
 
     private <T> CompletableFuture<T> supply(java.util.function.Supplier<T> supplier) {
