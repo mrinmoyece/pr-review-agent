@@ -31,32 +31,36 @@ public class SecurityScanTool {
 
     // OWASP A02: Cryptographic failures
     private static final Pattern WEAK_CRYPTO = Pattern.compile(
-            "MD5|SHA-1|DES\\b|RC4|getInstance\\(\"MD5\"|getInstance\\(\"SHA-1\")",
+            "MD5|SHA-1|DES\\b|RC4|getInstance\\(\"(?:MD5|SHA-1)\"\\)",
             Pattern.CASE_INSENSITIVE);
 
     // OWASP A05: Security misconfiguration — hardcoded secrets
     private static final Pattern HARDCODED_SECRET = Pattern.compile(
-            "(password|secret|api_key|apikey|token)\\s*=\\s*\"[^\"]{6,}\"",
+            "(password|passwd|pwd|secret|api_key|apikey|token)[A-Za-z0-9_]*\\s*=\\s*\"[^\"]{6,}\"",
             Pattern.CASE_INSENSITIVE);
 
     // OWASP A01: Missing input sanitisation on REST endpoints
     private static final Pattern UNVALIDATED_INPUT = Pattern.compile(
             "@(RequestParam|PathVariable|RequestBody)(?!.*@Valid)");
 
-    private record SecurityRule(Pattern pattern, String description,
+    private record SecurityRule(Pattern pattern, String title, String description,
                                 ReviewComment.CommentSeverity severity, String owaspRef) {}
 
     private final List<SecurityRule> rules = List.of(
             new SecurityRule(SQL_INJECTION,
+                    "Potential SQL injection",
                     "Potential SQL injection — use parameterised queries or JPA criteria instead of string concatenation.",
                     ReviewComment.CommentSeverity.CRITICAL, "OWASP A03:2021 – Injection"),
             new SecurityRule(WEAK_CRYPTO,
+                    "Weak cryptographic algorithm",
                     "Weak cryptographic algorithm detected. Use SHA-256 or stronger. MD5 and SHA-1 are broken for security use.",
                     ReviewComment.CommentSeverity.HIGH, "OWASP A02:2021 – Cryptographic Failures"),
             new SecurityRule(HARDCODED_SECRET,
+                    "Potential hardcoded secret",
                     "Potential hardcoded secret detected. Use environment variables or a secrets manager (Azure Key Vault, AWS Secrets Manager).",
                     ReviewComment.CommentSeverity.CRITICAL, "OWASP A02:2021 – Cryptographic Failures"),
             new SecurityRule(UNVALIDATED_INPUT,
+                    "Unvalidated request input",
                     "Request parameter without @Valid annotation — add Bean Validation constraints to prevent invalid input reaching business logic.",
                     ReviewComment.CommentSeverity.MEDIUM, "OWASP A03:2021 – Injection")
     );
@@ -68,7 +72,8 @@ public class SecurityScanTool {
             // DiffFile.filename is the path relative to repo root
             if (!file.getFilename().endsWith(".java")) continue;
 
-            for (AddedLine added : extractAddedLinesWithRealLineNumbers(file.getRawDiff())) {
+            List<AddedLine> addedLines = extractAddedLinesWithRealLineNumbers(file.getRawDiff());
+            for (AddedLine added : addedLines) {
                 for (SecurityRule rule : rules) {
                     if (rule.pattern().matcher(added.code()).find()) {
                         comments.add(ReviewComment.builder()
@@ -76,7 +81,7 @@ public class SecurityScanTool {
                                 .lineNumber(added.lineNumber())
                                 .severity(rule.severity())
                                 .category(ReviewComment.CommentCategory.SECURITY)
-                                .title(rule.owaspRef())
+                                .title(rule.title())
                                 .body(formatComment(rule, added.code()))
                                 .build());
                         log.debug("Security issue in {} line {}: {}",

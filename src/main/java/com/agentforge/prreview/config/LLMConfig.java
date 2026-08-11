@@ -15,6 +15,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
 
 /**
  * LLM and HTTP client configuration.
@@ -39,6 +43,9 @@ public class LLMConfig {
     @Value("${github.token:}")
     private String githubToken;
 
+    @Value("${github.models.token:}")
+    private String githubModelsToken;
+
     @Bean
     public OpenAIClient openAIClient() {
         if ("azure_openai".equals(provider) && StringUtils.hasText(azureKey)) {
@@ -49,17 +56,28 @@ public class LLMConfig {
                     .buildClient();
         }
         log.info("LLM: GitHub Models endpoint={}", githubModelsEndpoint);
+        if (!StringUtils.hasText(githubModelsToken)) {
+            throw new IllegalStateException("GITHUB_MODELS_TOKEN is required for the GitHub Models provider");
+        }
         return new OpenAIClientBuilder()
                 .endpoint(githubModelsEndpoint)
-                .credential(new KeyCredential(githubToken))
+                .credential(new KeyCredential(githubModelsToken))
                 .buildClient();
     }
 
     @Bean
     public RestClient gitHubRestClient() {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofSeconds(30));
         return RestClient.builder()
                 .baseUrl("https://api.github.com")
+                .requestFactory(requestFactory)
                 .defaultHeader("Accept", "application/vnd.github.v3+json")
+                .defaultHeader("X-GitHub-Api-Version", "2022-11-28")
                 .build();
     }
 

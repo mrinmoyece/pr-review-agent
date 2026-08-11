@@ -7,6 +7,10 @@ package com.agentforge.prreview.exception;
  */
 public class ReviewAgentException extends RuntimeException {
 
+    public ReviewAgentException(String message) {
+        super(message);
+    }
+
     public ReviewAgentException(String message, Throwable cause) {
         super(message, cause);
     }

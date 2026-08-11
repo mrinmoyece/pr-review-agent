@@ -1,30 +1,53 @@
 package com.agentforge.prreview.agent;
 
 import com.agentforge.prreview.exception.ReviewAgentException;
-import com.agentforge.prreview.model.*;
-import com.agentforge.prreview.tool.*;
-import lombok.RequiredArgsConstructor;
+import com.agentforge.prreview.model.AutoFix;
+import com.agentforge.prreview.model.DiffFile;
+import com.agentforge.prreview.model.ReviewComment;
+import com.agentforge.prreview.model.ReviewPass;
+import com.agentforge.prreview.model.ReviewResult;
+import com.agentforge.prreview.model.ReviewRoundResult;
+import com.agentforge.prreview.model.TicketAlignment;
+import com.agentforge.prreview.tool.ArchitectureCheckTool;
+import com.agentforge.prreview.tool.GitHubAutoFixTool;
+import com.agentforge.prreview.tool.GitHubCommentTool;
+import com.agentforge.prreview.tool.GitHubDiffTool;
+import com.agentforge.prreview.tool.JiraTicketTool;
+import com.agentforge.prreview.tool.LLMReviewTool;
+import com.agentforge.prreview.tool.PerformanceAnalysisTool;
+import com.agentforge.prreview.tool.ReviewHistoryTool;
+import com.agentforge.prreview.tool.SecurityScanTool;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import java.util.*;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 /**
- * PR Review Agent — orchestrates multi-tool review pipeline.
- *
- * Review pipeline:
- *   1. Fetch PR diff from GitHub
- *   2. PARALLEL: [security, arch, perf] + jira alignment check + load team patterns
- *   3. LLM holistic review (with team patterns for context)
- *   4. Determine verdict + score
- *   5. Auto-fix eligible LOW/MEDIUM comments (commits to branch)
- *   6. Post all comments to GitHub PR
+ * Orchestrates static analysis, parallel specialist reviews, adversarial verification and reporting.
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class PRReviewAgent {
+
+    private static final List<ReviewPass> SPECIALIST_PASSES = List.of(
+            ReviewPass.SECURITY,
+            ReviewPass.CORRECTNESS,
+            ReviewPass.TESTING,
+            ReviewPass.ARCHITECTURE,
+            ReviewPass.PERFORMANCE,
+            ReviewPass.OPERATIONS
+    );
 
     private final GitHubDiffTool gitHubDiffTool;
     private final SecurityScanTool securityScanTool;
@@ -35,55 +58,100 @@ public class PRReviewAgent {
     private final JiraTicketTool jiraTicketTool;
     private final ReviewHistoryTool reviewHistoryTool;
     private final GitHubAutoFixTool gitHubAutoFixTool;
+    @Qualifier("reviewFanOutExecutor")
+    private final Executor reviewFanOutExecutor;
 
-    @Async
+    @Value("${github.repository-allowlist:}")
+    private String repositoryAllowlist;
+
+    public PRReviewAgent(GitHubDiffTool gitHubDiffTool,
+                         SecurityScanTool securityScanTool,
+                         ArchitectureCheckTool architectureCheckTool,
+                         PerformanceAnalysisTool performanceAnalysisTool,
+                         LLMReviewTool llmReviewTool,
+                         GitHubCommentTool gitHubCommentTool,
+                         JiraTicketTool jiraTicketTool,
+                         ReviewHistoryTool reviewHistoryTool,
+                         GitHubAutoFixTool gitHubAutoFixTool,
+                         @Qualifier("reviewFanOutExecutor") Executor reviewFanOutExecutor) {
+        this.gitHubDiffTool = gitHubDiffTool;
+        this.securityScanTool = securityScanTool;
+        this.architectureCheckTool = architectureCheckTool;
+        this.performanceAnalysisTool = performanceAnalysisTool;
+        this.llmReviewTool = llmReviewTool;
+        this.gitHubCommentTool = gitHubCommentTool;
+        this.jiraTicketTool = jiraTicketTool;
+        this.reviewHistoryTool = reviewHistoryTool;
+        this.gitHubAutoFixTool = gitHubAutoFixTool;
+        this.reviewFanOutExecutor = reviewFanOutExecutor;
+    }
+
+    @Async("reviewExecutor")
     public CompletableFuture<ReviewResult> review(String repoFullName, int prNumber,
                                                    String headBranch, String prTitle, String prBody) {
-        log.info("Starting PR review — {}/#{}", repoFullName, prNumber);
-
+        log.info("Starting PR review - {}/#{}", repoFullName, prNumber);
         try {
-            // STEP 1: Fetch diff
-            log.info("[ACT] Fetching PR diff");
+            if (!allowedRepositories().contains(repoFullName)) {
+                throw new ReviewAgentException("Repository is not in the configured allowlist");
+            }
             String diff = gitHubDiffTool.fetchDiff(repoFullName, prNumber);
+            if (diff == null || diff.isBlank()) {
+                throw new ReviewAgentException("GitHub returned an empty diff; refusing to approve");
+            }
             List<DiffFile> changedFiles = gitHubDiffTool.parseDiff(diff);
-            log.info("[OBSERVE] {} files changed in PR", changedFiles.size());
+            if (changedFiles.isEmpty()) {
+                throw new ReviewAgentException("No reviewable files were parsed from the pull request diff");
+            }
 
-            // STEP 2: Run static tools, Jira check, and history loading in parallel
-            CompletableFuture<Optional<TicketAlignment>> jiraFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<Optional<TicketAlignment>> jiraFuture = supply(
                     () -> jiraTicketTool.checkAlignment(prTitle, prBody, diff));
-            CompletableFuture<String> patternsFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<String> patternsFuture = supply(
                     () -> reviewHistoryTool.loadTeamPatterns(repoFullName));
-            CompletableFuture<List<ReviewComment>> secFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<List<ReviewComment>> securityFuture = supply(
                     () -> securityScanTool.scan(changedFiles));
-            CompletableFuture<List<ReviewComment>> archFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<List<ReviewComment>> architectureFuture = supply(
                     () -> architectureCheckTool.check(changedFiles));
-            CompletableFuture<List<ReviewComment>> perfFuture = CompletableFuture.supplyAsync(
+            CompletableFuture<List<ReviewComment>> performanceFuture = supply(
                     () -> performanceAnalysisTool.analyse(changedFiles));
 
-            CompletableFuture.allOf(jiraFuture, patternsFuture, secFuture, archFuture, perfFuture).join();
+            CompletableFuture.allOf(jiraFuture, patternsFuture, securityFuture,
+                    architectureFuture, performanceFuture).join();
 
-            List<ReviewComment> securityComments = secFuture.get();
-            List<ReviewComment> allComments = new ArrayList<>();
-            allComments.addAll(securityComments);
-            allComments.addAll(archFuture.get());
-            allComments.addAll(perfFuture.get());
+            List<ReviewComment> staticComments = new ArrayList<>();
+            staticComments.addAll(securityFuture.join());
+            staticComments.addAll(architectureFuture.join());
+            staticComments.addAll(performanceFuture.join());
+            String teamPatterns = patternsFuture.join();
 
-            log.info("[OBSERVE] Static analysis: {} total issues found", allComments.size());
+            List<CompletableFuture<ReviewRoundResult>> specialistFutures = SPECIALIST_PASSES.stream()
+                    .map(pass -> supply(() -> llmReviewTool.review(
+                            pass, changedFiles, staticComments, teamPatterns)))
+                    .toList();
+            CompletableFuture.allOf(specialistFutures.toArray(CompletableFuture[]::new)).join();
 
-            // STEP 3: LLM holistic review with team patterns
-            String teamPatterns = patternsFuture.get();
-            log.info("[ACT] Running LLM review for context-aware analysis");
-            List<ReviewComment> llmComments = llmReviewTool.review(diff, allComments, teamPatterns);
-            allComments.addAll(llmComments);
-            log.info("[OBSERVE] LLM added {} additional comments", llmComments.size());
+            List<ReviewRoundResult> rounds = new ArrayList<>();
+            specialistFutures.forEach(future -> rounds.add(future.join()));
+            List<ReviewComment> commentsBeforeVerification = new ArrayList<>(staticComments);
+            rounds.forEach(round -> commentsBeforeVerification.addAll(round.getComments()));
 
-            // STEP 4: Determine verdict + score
-            ReviewResult.ReviewVerdict verdict = determineVerdict(allComments);
+            ReviewRoundResult verification = llmReviewTool.review(
+                    ReviewPass.ADVERSARIAL_VERIFICATION,
+                    changedFiles,
+                    deduplicate(commentsBeforeVerification),
+                    teamPatterns);
+            rounds.add(verification);
+
+            List<ReviewComment> allComments = new ArrayList<>(commentsBeforeVerification);
+            allComments.addAll(verification.getComments());
+            allComments = deduplicate(allComments);
+
+            boolean reviewComplete = rounds.stream()
+                    .allMatch(round -> round.getStatus() == ReviewRoundResult.RoundStatus.COMPLETE);
+            ReviewResult.ReviewVerdict verdict = determineVerdict(allComments, reviewComplete);
             int score = calculateScore(allComments);
-
-            // STEP 5: Auto-fix eligible LOW/MEDIUM comments
-            log.info("[ACT] Attempting auto-fix for eligible comments");
-            List<AutoFix> autoFixes = gitHubAutoFixTool.applyFixes(repoFullName, headBranch, allComments);
+            List<AutoFix> autoFixes = reviewComplete
+                    ? gitHubAutoFixTool.applyFixes(repoFullName, headBranch, allComments)
+                    : List.of();
 
             ReviewResult result = ReviewResult.builder()
                     .repositoryFullName(repoFullName)
@@ -91,36 +159,45 @@ public class PRReviewAgent {
                     .verdict(verdict)
                     .overallScore(score)
                     .comments(allComments)
-                    .securitySummary(buildSecuritySummary(securityComments))
+                    .securitySummary(buildSecuritySummary(allComments))
                     .executiveSummary(llmReviewTool.generateSummary(allComments, verdict, score))
-                    .ticketAlignment(jiraFuture.get().orElse(null))
+                    .ticketAlignment(jiraFuture.join().orElse(null))
                     .autoFixesApplied(autoFixes)
+                    .reviewRounds(List.copyOf(rounds))
+                    .reviewComplete(reviewComplete)
+                    .reviewedAt(Instant.now())
                     .build();
 
-            // STEP 6: Post all comments to GitHub
-            log.info("[ACT] Posting {} comments to PR #{}", allComments.size(), prNumber);
             gitHubCommentTool.postReview(repoFullName, prNumber, result);
-            log.info("[OBSERVE] Review posted — verdict: {}, score: {}/100", verdict, score);
-
+            log.info("Review posted - verdict={} score={} complete={}", verdict, score, reviewComplete);
             return CompletableFuture.completedFuture(result);
-
         } catch (Exception e) {
             log.error("PR review failed for {}/#{}: {}", repoFullName, prNumber, e.getMessage(), e);
-            throw new ReviewAgentException("PR review failed", e);
+            throw e instanceof ReviewAgentException reviewException
+                    ? reviewException
+                    : new ReviewAgentException("PR review failed", e);
         }
     }
 
-    private ReviewResult.ReviewVerdict determineVerdict(List<ReviewComment> comments) {
-        boolean hasCritical = comments.stream()
-                .anyMatch(c -> c.getSeverity() == ReviewComment.CommentSeverity.CRITICAL);
-        boolean hasHigh = comments.stream()
-                .anyMatch(c -> c.getSeverity() == ReviewComment.CommentSeverity.HIGH &&
-                               c.getCategory() == ReviewComment.CommentCategory.SECURITY);
-        if (hasCritical || hasHigh) return ReviewResult.ReviewVerdict.REQUEST_CHANGES;
+    private <T> CompletableFuture<T> supply(java.util.function.Supplier<T> supplier) {
+        return CompletableFuture.supplyAsync(supplier, reviewFanOutExecutor);
+    }
 
-        boolean hasMedium = comments.stream()
-                .anyMatch(c -> c.getSeverity() == ReviewComment.CommentSeverity.MEDIUM);
-        return hasMedium ? ReviewResult.ReviewVerdict.COMMENT : ReviewResult.ReviewVerdict.APPROVE;
+    private ReviewResult.ReviewVerdict determineVerdict(List<ReviewComment> comments,
+                                                         boolean reviewComplete) {
+        boolean hasBlocking = comments.stream().anyMatch(c ->
+                c.getSeverity() == ReviewComment.CommentSeverity.CRITICAL
+                        || c.getSeverity() == ReviewComment.CommentSeverity.HIGH);
+        if (hasBlocking) {
+            return ReviewResult.ReviewVerdict.REQUEST_CHANGES;
+        }
+        if (!reviewComplete) {
+            return ReviewResult.ReviewVerdict.COMMENT;
+        }
+        boolean hasAdvisory = comments.stream().anyMatch(c ->
+                c.getSeverity() == ReviewComment.CommentSeverity.MEDIUM
+                        || c.getSeverity() == ReviewComment.CommentSeverity.LOW);
+        return hasAdvisory ? ReviewResult.ReviewVerdict.COMMENT : ReviewResult.ReviewVerdict.APPROVE;
     }
 
     private int calculateScore(List<ReviewComment> comments) {
@@ -129,19 +206,43 @@ public class PRReviewAgent {
             case HIGH -> 15;
             case MEDIUM -> 5;
             case LOW -> 2;
-            default -> 0;
+            case INFO -> 0;
         }).sum();
         return Math.max(0, 100 - deductions);
     }
 
-    private ReviewResult.SecuritySummary buildSecuritySummary(List<ReviewComment> secComments) {
+    private List<ReviewComment> deduplicate(List<ReviewComment> comments) {
+        Map<String, ReviewComment> unique = new LinkedHashMap<>();
+        for (ReviewComment comment : comments) {
+            String key = (comment.getFilename() + "|" + comment.getLineNumber() + "|"
+                    + comment.getCategory() + "|" + comment.getTitle()).toLowerCase(Locale.ROOT);
+            unique.putIfAbsent(key, comment);
+        }
+        return List.copyOf(unique.values());
+    }
+
+    private ReviewResult.SecuritySummary buildSecuritySummary(List<ReviewComment> comments) {
+        List<ReviewComment> securityComments = comments.stream()
+                .filter(c -> c.getCategory() == ReviewComment.CommentCategory.SECURITY)
+                .toList();
         return ReviewResult.SecuritySummary.builder()
-                .criticalCount((int) secComments.stream()
-                        .filter(c -> c.getSeverity() == ReviewComment.CommentSeverity.CRITICAL).count())
-                .highCount((int) secComments.stream()
-                        .filter(c -> c.getSeverity() == ReviewComment.CommentSeverity.HIGH).count())
-                .mediumCount((int) secComments.stream()
-                        .filter(c -> c.getSeverity() == ReviewComment.CommentSeverity.MEDIUM).count())
+                .criticalCount(countSeverity(securityComments, ReviewComment.CommentSeverity.CRITICAL))
+                .highCount(countSeverity(securityComments, ReviewComment.CommentSeverity.HIGH))
+                .mediumCount(countSeverity(securityComments, ReviewComment.CommentSeverity.MEDIUM))
                 .build();
+    }
+
+    private int countSeverity(List<ReviewComment> comments, ReviewComment.CommentSeverity severity) {
+        return (int) comments.stream().filter(c -> c.getSeverity() == severity).count();
+    }
+
+    private java.util.Set<String> allowedRepositories() {
+        if (repositoryAllowlist == null || repositoryAllowlist.isBlank()) {
+            return java.util.Set.of();
+        }
+        return java.util.Arrays.stream(repositoryAllowlist.split(","))
+                .map(String::strip)
+                .filter(value -> !value.isBlank())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 }

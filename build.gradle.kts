@@ -23,26 +23,32 @@ configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
     }
+    named("spotbugs") {
+        resolutionStrategy.force("org.apache.commons:commons-lang3:3.20.0")
+    }
 }
 
 repositories {
     mavenCentral()
 }
 
-extra["azureOpenAiVersion"]  = "1.0.0-beta.16"
-extra["resilience4jVersion"] = "2.2.0"
+val azureOpenAiVersion = "1.0.0-beta.16"
+val resilience4jVersion = "2.2.0"
+extra["commons-lang3.version"] = "3.20.0"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-aop")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
-    implementation("com.azure:azure-ai-openai:${extra["azureOpenAiVersion"]}")
+    implementation("com.azure:azure-ai-openai:$azureOpenAiVersion")
 
-    implementation("io.github.resilience4j:resilience4j-spring-boot3:${extra["resilience4jVersion"]}")
-    implementation("io.github.resilience4j:resilience4j-circuitbreaker:${extra["resilience4jVersion"]}")
-    implementation("io.github.resilience4j:resilience4j-retry:${extra["resilience4jVersion"]}")
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:$resilience4jVersion")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:$resilience4jVersion")
+    implementation("io.github.resilience4j:resilience4j-retry:$resilience4jVersion")
 
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
@@ -64,17 +70,17 @@ tasks.named<BootJar>("bootJar") {
     archiveFileName.set("${project.name}-${project.version}.jar")
 }
 
-// ── Code quality: Checkstyle (advisory — report-only until baseline is clean) ──
+// ── Code quality: Checkstyle ──────────────────────────────────────────────────
 checkstyle {
     toolVersion = "10.20.2"
     configFile = file("config/checkstyle/checkstyle.xml")
-    isIgnoreFailures = true
-    maxWarnings = Int.MAX_VALUE
+    isIgnoreFailures = false
+    maxWarnings = 0
 }
 
-// ── Code quality: SpotBugs (advisory — report-only until baseline is clean) ──
+// ── Code quality: SpotBugs ────────────────────────────────────────────────────
 spotbugs {
-    ignoreFailures.set(true)
+    ignoreFailures.set(false)
     reportLevel.set(com.github.spotbugs.snom.Confidence.HIGH)
 }
 
@@ -103,10 +109,13 @@ tasks.test {
     finalizedBy(tasks.jacocoTestReport)
 }
 
-// ── SCA: OWASP Dependency-Check — fails the build on Critical (CVSS >= 9) findings.
+// ── SCA: OWASP Dependency-Check — fails the build on High/Critical findings.
 // Set an NVD_API_KEY repo secret to avoid NVD rate-limiting on the CVE feed sync.
 dependencyCheck {
-    failBuildOnCVSS = 9.0f
+    failBuildOnCVSS = 7.0f
+    autoUpdate = providers.gradleProperty("dependencyCheckAutoUpdate")
+        .map(String::toBoolean)
+        .getOrElse(true)
     nvd {
         apiKey = System.getenv("NVD_API_KEY")
     }

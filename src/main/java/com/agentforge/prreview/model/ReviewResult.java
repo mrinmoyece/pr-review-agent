@@ -25,6 +25,10 @@ public class ReviewResult {
     private TicketAlignment ticketAlignment;
     /** Auto-fixes committed to the PR branch during this review. */
     private List<AutoFix> autoFixesApplied;
+    /** Auditable status and output of every LLM specialist pass. */
+    private List<ReviewRoundResult> reviewRounds;
+    /** False when any required analysis pass failed or input was truncated. */
+    private boolean reviewComplete;
     private Instant reviewedAt;
 
     public enum ReviewVerdict {

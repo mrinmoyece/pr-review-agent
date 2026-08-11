@@ -1,6 +1,7 @@
 package com.agentforge.prreview.tool;
 
 import com.agentforge.prreview.model.DiffFile;
+import com.agentforge.prreview.exception.ReviewAgentException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
@@ -39,8 +40,8 @@ public class GitHubDiffTool {
     }
 
     public String fetchDiffFallback(String repoFullName, int prNumber, Throwable t) {
-        log.warn("GitHub API unavailable for {}/#{}: {}", repoFullName, prNumber, t.getMessage());
-        return "";
+        throw new ReviewAgentException(
+                "GitHub API unavailable for " + repoFullName + "/#" + prNumber, t);
     }
 
     /**

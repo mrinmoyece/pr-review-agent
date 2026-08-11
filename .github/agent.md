@@ -17,13 +17,16 @@ GitHub webhook (pull_request opened/synchronize)
             PerformanceAnalysisTool — N+1 patterns, blocking calls in reactive
             JiraTicketTool          — ticket alignment check (no-op if Jira not configured)
             ReviewHistoryTool       — load team patterns from past 20 PRs (Caffeine-cached 1h)
-        Step 3: LLMReviewTool       — holistic review with team patterns + existing findings
-        Step 4: Determine verdict + score
-        Step 5: GitHubAutoFixTool   — commit LOW/MEDIUM auto-fixes to PR branch
-        Step 6: GitHubCommentTool   — post inline + summary comments (includes alignment + fix sections)
+        Step 3: LLMReviewTool       — six parallel specialist passes
+        Step 4: LLMReviewTool       — adversarial verification pass
+        Step 5: Determine verdict + score; incomplete coverage cannot approve
+        Step 6: GitHubAutoFixTool   — disabled by default; protected paths denied
+        Step 7: GitHubCommentTool   — post findings and review coverage
 ```
 Static analysis runs before LLM to reduce token cost and avoid duplication.
-Steps 2 run in parallel via `CompletableFuture.supplyAsync` — do not introduce sequential dependencies between them.
+Steps 2 and the specialist passes use the bounded `reviewExecutor`. The
+verification pass intentionally runs after specialists so it can challenge
+their aggregate output.
 
 ## Severity Model
 | Severity | Meaning | Blocks Merge? |
@@ -44,9 +47,10 @@ Score 0–100: < 60 = REJECT, 60–79 = REQUEST_CHANGES, 80–89 = APPROVE_WITH_
 
 ## LLM Rules
 - `LLMReviewTool` receives a list of `existingFindings` — prompt must tell LLM to skip these
-- Temperature: 0.3 (allows some creativity in suggestions but stays grounded)
-- Max tokens: 1500 per review (enough for 5–8 substantive comments)
-- If the diff is > 800 lines, chunk it and review in parts
+- - Temperature: 0.1 for evidence-focused findings
+- Diff input and findings are bounded by `review.llm.*` configuration
+- Every output filename must match a changed file; malformed output is rejected
+- PR content, tickets, history, and model output are always untrusted data
 
 ## Adding New Rules
 To add a new security rule:
@@ -68,7 +72,8 @@ Rules automatically apply to all future PRs with no other changes needed.
 
 ### 1. GitHubAutoFixTool — Automated Low-Risk Fixes
 
-Commits LLM-generated fixes for `autoFixable=true` comments directly to the PR branch.
+Auto-fix is off by default and must not be enabled without a separate
+least-privilege write identity and human-controlled workflow.
 
 **Safety boundary**: only `LOW` and `MEDIUM` severity comments are eligible.
 `CRITICAL` and `HIGH` comments are never auto-committed — they always require human review.

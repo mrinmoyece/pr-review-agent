@@ -3,6 +3,7 @@ package com.agentforge.prreview.tool;
 import com.agentforge.prreview.model.AutoFix;
 import com.agentforge.prreview.model.ReviewComment;
 import com.agentforge.prreview.model.ReviewResult;
+import com.agentforge.prreview.model.ReviewRoundResult;
 import com.agentforge.prreview.model.TicketAlignment;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
@@ -63,10 +64,8 @@ public class GitHubCommentTool {
 
     public void postReviewFallback(String repoFullName, int prNumber,
                                    ReviewResult result, Throwable t) {
-        log.error("Failed to post review to GitHub {}/#{}: {} — review content logged below",
-                repoFullName, prNumber, t.getMessage());
-        log.error("Review summary: verdict={} score={} comments={}",
-                result.getVerdict(), result.getOverallScore(), result.getComments().size());
+        throw new IllegalStateException(
+                "Failed to post review to GitHub " + repoFullName + "/#" + prNumber, t);
     }
 
     private String buildReviewBody(ReviewResult result) {
@@ -74,6 +73,23 @@ public class GitHubCommentTool {
         sb.append("## AgentForge PR Review\n\n");
         sb.append("**Verdict**: ").append(result.getVerdict()).append("\n");
         sb.append("**Score**: ").append(result.getOverallScore()).append("/100\n\n");
+        if (!result.isReviewComplete()) {
+            sb.append("> [!WARNING]\n");
+            sb.append("> Review coverage is incomplete. This result must not be treated as approval.\n\n");
+        }
+
+        if (result.getReviewRounds() != null && !result.getReviewRounds().isEmpty()) {
+            sb.append("### Review Coverage\n\n");
+            sb.append("| Pass | Status | Model | Findings |\n");
+            sb.append("|---|---|---|---:|\n");
+            for (ReviewRoundResult round : result.getReviewRounds()) {
+                sb.append("| ").append(round.getPass())
+                        .append(" | ").append(round.getStatus())
+                        .append(" | `").append(round.getModel()).append("`")
+                        .append(" | ").append(round.getComments().size()).append(" |\n");
+            }
+            sb.append("\n");
+        }
 
         if (result.getSecuritySummary() != null) {
             ReviewResult.SecuritySummary sec = result.getSecuritySummary();
@@ -86,6 +102,19 @@ public class GitHubCommentTool {
 
         if (result.getExecutiveSummary() != null) {
             sb.append("### Executive Summary\n").append(result.getExecutiveSummary()).append("\n\n");
+        }
+
+        List<ReviewComment> generalComments = result.getComments().stream()
+                .filter(comment -> comment.getLineNumber() == null)
+                .toList();
+        if (!generalComments.isEmpty()) {
+            sb.append("### General Findings\n");
+            generalComments.forEach(comment -> sb.append("- **[")
+                    .append(comment.getSeverity()).append("] ")
+                    .append(comment.getTitle()).append("** (`")
+                    .append(comment.getFilename()).append("`): ")
+                    .append(comment.getBody()).append("\n"));
+            sb.append("\n");
         }
 
         // Ticket alignment section

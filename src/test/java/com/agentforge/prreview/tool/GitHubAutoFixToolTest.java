@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
@@ -24,6 +25,7 @@ class GitHubAutoFixToolTest {
                 mock(OpenAIClient.class),
                 new ObjectMapper()
         );
+        ReflectionTestUtils.setField(tool, "autoFixEnabled", true);
     }
 
     private ReviewComment comment(ReviewComment.CommentSeverity severity, boolean autoFixable) {
@@ -74,6 +76,27 @@ class GitHubAutoFixToolTest {
         );
 
         List<AutoFix> result = tool.applyFixes("org/repo", "feature-branch", comments);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void givenAutoFixDisabled_whenApplyFixes_thenReturnsEmptyList() {
+        ReflectionTestUtils.setField(tool, "autoFixEnabled", false);
+
+        List<AutoFix> result = tool.applyFixes(
+                "org/repo", "feature-branch",
+                List.of(comment(ReviewComment.CommentSeverity.LOW, true)));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void givenSensitiveWorkflowPath_whenApplyFixes_thenReturnsEmptyList() {
+        List<AutoFix> result = tool.applyFixes(
+                "org/repo", "feature-branch",
+                List.of(comment(ReviewComment.CommentSeverity.LOW, true,
+                        ".github/workflows/ci.yml")));
 
         assertThat(result).isEmpty();
     }
