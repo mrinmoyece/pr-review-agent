@@ -66,13 +66,16 @@ The system combines deterministic controls with model-output validation:
    and suggested fixes are discarded.
 5. Chunk size, chunk count, total-diff, output-token, and finding limits bound
    model work.
-6. Auto-fix is off by default. Trusted application policy can authorize only
-   verified, anchored, low-severity style findings for Java files under
-   `src/main/java` or `src/test/java`; model flags and snippets grant no authority.
+6. Fix-candidate reporting is off by default. Trusted application policy can
+   identify only verified, anchored, low-severity style findings for Java files
+   under `src/main/java` or `src/test/java`; model flags and snippets grant no
+   authority, and the agent never writes repository content.
 7. Adversarial verification explicitly confirms or rejects every specialist
    finding and independently searches for misses even when specialists found
    nothing; rejected claims cannot affect the verdict. Verification failure
    retains candidates as unverified risk and marks coverage incomplete.
+   Candidate decisions are response-batched so valid aggregate volume cannot
+   silently exhaust one output-token budget.
 8. Incomplete model coverage can produce only `COMMENT`, never `APPROVE`.
 
 Evidence:

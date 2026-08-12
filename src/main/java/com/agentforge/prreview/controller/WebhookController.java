@@ -21,6 +21,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 
@@ -144,7 +145,9 @@ public class WebhookController {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid PR number in payload"));
         }
         String replayKey = authenticatedReplayKey(payload);
-        if (deliveryId.isBlank() || !webhookDeliveryStore.recordIfNew(replayKey)) {
+        String reservationToken = UUID.randomUUID().toString();
+        if (deliveryId.isBlank()
+                || !webhookDeliveryStore.recordIfNew(replayKey, reservationToken)) {
             log.warn("Duplicate or missing webhook delivery");
             return ResponseEntity.status(409).body(Map.of("error", "Duplicate delivery"));
         }
@@ -161,11 +164,11 @@ public class WebhookController {
                     log.error("Review failed for {}/#{} [{}]: {}",
                             repo, prNumber, failure.getClass().getSimpleName(),
                             sanitizeForLog(failure.getMessage()));
-                    releaseFailedDelivery(replayKey, deliveryId);
+                    releaseFailedDelivery(replayKey, reservationToken);
                 }
             });
         } catch (RuntimeException e) {
-            releaseFailedDelivery(replayKey, deliveryId);
+            releaseFailedDelivery(replayKey, reservationToken);
             throw e;
         }
 
@@ -253,13 +256,12 @@ public class WebhookController {
         }
     }
 
-    private void releaseFailedDelivery(String replayKey, String deliveryId) {
+    private void releaseFailedDelivery(String replayKey, String reservationToken) {
         try {
-            webhookDeliveryStore.release(replayKey);
+            webhookDeliveryStore.release(replayKey, reservationToken);
         } catch (RuntimeException releaseFailure) {
-            log.error("Could not release failed webhook delivery {} [{}]: {}",
-                    sanitizeForLog(deliveryId), releaseFailure.getClass().getSimpleName(),
-                    sanitizeForLog(releaseFailure.getMessage()));
+            log.error("Could not release failed webhook delivery; "
+                    + "replay reservation remains until expiry");
         }
     }
 }

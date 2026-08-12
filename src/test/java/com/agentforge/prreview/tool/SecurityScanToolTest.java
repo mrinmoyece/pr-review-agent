@@ -59,6 +59,18 @@ class SecurityScanToolTest {
     }
 
     @Test
+    void ordinaryIdentifiersContainingCredentialPrefixesAreNotSecrets() {
+        DiffFile file = javaFile("Tokenizer.java",
+                List.of("String tokenizer = \"wordpiece\";",
+                        "String passwordPolicy = \"minimum-length\";"));
+
+        List<ReviewComment> comments = securityScanTool.scan(List.of(file));
+
+        assertThat(comments).noneMatch(c ->
+                c.getTitle().toLowerCase().contains("secret"));
+    }
+
+    @Test
     void givenCleanCode_whenScanned_thenNoIssues() {
         DiffFile file = javaFile("Service.java",
                 List.of("@Service",

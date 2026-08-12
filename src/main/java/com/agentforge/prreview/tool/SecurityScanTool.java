@@ -36,7 +36,9 @@ public class SecurityScanTool {
 
     // OWASP A05: Security misconfiguration — hardcoded secrets
     private static final Pattern HARDCODED_SECRET = Pattern.compile(
-            "(password|passwd|pwd|secret|api_key|apikey|token)[A-Za-z0-9_]*\\s*=\\s*\"[^\"]{6,}\"",
+            "\\b(?:[A-Za-z_$][A-Za-z0-9_$]*)?"
+                    + "(?:password|passwd|pwd|secret|api_?key|token)\\b"
+                    + "\\s*=\\s*\"[^\"]{6,}\"",
             Pattern.CASE_INSENSITIVE);
 
     // OWASP A01: Missing input sanitisation on REST endpoints

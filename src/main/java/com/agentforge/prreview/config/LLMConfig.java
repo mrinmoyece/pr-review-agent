@@ -48,21 +48,34 @@ public class LLMConfig {
 
     @Bean
     public OpenAIClient openAIClient() {
-        if ("azure_openai".equals(provider) && StringUtils.hasText(azureKey)) {
-            log.info("LLM: Azure OpenAI endpoint={}", azureEndpoint);
-            return new OpenAIClientBuilder()
-                    .endpoint(azureEndpoint)
-                    .credential(new AzureKeyCredential(azureKey))
-                    .buildClient();
+        return switch (provider) {
+            case "azure_openai" -> {
+                requireProviderValue(azureEndpoint, "AZURE_OPENAI_ENDPOINT", provider);
+                requireProviderValue(azureKey, "AZURE_OPENAI_API_KEY", provider);
+                log.info("LLM provider: Azure OpenAI");
+                yield new OpenAIClientBuilder()
+                        .endpoint(azureEndpoint)
+                        .credential(new AzureKeyCredential(azureKey))
+                        .buildClient();
+            }
+            case "github_models" -> {
+                requireProviderValue(githubModelsEndpoint, "GITHUB_MODELS_ENDPOINT", provider);
+                requireProviderValue(githubModelsToken, "GITHUB_MODELS_TOKEN", provider);
+                log.info("LLM provider: GitHub Models");
+                yield new OpenAIClientBuilder()
+                        .endpoint(githubModelsEndpoint)
+                        .credential(new KeyCredential(githubModelsToken))
+                        .buildClient();
+            }
+            default -> throw new IllegalStateException("Unsupported LLM_PROVIDER: " + provider);
+        };
+    }
+
+    private void requireProviderValue(String value, String variable, String selectedProvider) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalStateException(
+                    variable + " is required for the " + selectedProvider + " provider");
         }
-        log.info("LLM: GitHub Models endpoint={}", githubModelsEndpoint);
-        if (!StringUtils.hasText(githubModelsToken)) {
-            throw new IllegalStateException("GITHUB_MODELS_TOKEN is required for the GitHub Models provider");
-        }
-        return new OpenAIClientBuilder()
-                .endpoint(githubModelsEndpoint)
-                .credential(new KeyCredential(githubModelsToken))
-                .buildClient();
     }
 
     @Bean

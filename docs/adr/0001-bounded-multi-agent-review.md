@@ -19,7 +19,9 @@ the verdict. If verification cannot inspect complete evidence or fails,
 candidates remain visible and the review is incomplete. Bound diff
 characters, chunk size, chunk count, output tokens, and findings. Record every
 round's model, status, chunk count, details, and findings. Any failed, truncated,
-or capped round prevents approval.
+or capped round prevents approval. Verify candidate decisions in bounded batches;
+only the first batch performs missed-finding discovery, preventing default-valid
+candidate volumes from overflowing one model response.
 
 ## Alternatives
 

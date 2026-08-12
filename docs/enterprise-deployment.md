@@ -9,7 +9,8 @@ described in [Architecture](architecture.md), abuse cases in the
 
 Use a GitHub App, not a personal access token. Install it only on approved
 repositories and grant `Contents: read`, `Metadata: read`, and
-`Pull requests: write`. Keep `Contents: write` disabled while auto-fix is off.
+`Pull requests: write`. Keep `Contents: write` disabled; the agent does not write
+repository content.
 Use a separate inference-only credential for `GITHUB_MODELS_TOKEN`.
 
 Set a random webhook secret of at least 32 bytes and configure
@@ -66,7 +67,7 @@ gate.
 | Model provider and credential | `LLM_PROVIDER`, provider variables | AI platform owner |
 | Shared replay store | `REDIS_*` | Platform owner |
 | Review budgets | `REVIEW_LLM_*` | AI/application owner |
-| Auto-fix | `REVIEW_AUTO_FIX_ENABLED` | Repository and security owners |
+| Fix-candidate reporting | `REVIEW_AUTO_FIX_ENABLED` | Repository and security owners |
 | Runtime resources and network | `k8s/deployment.yaml` overlay | Platform owner |
 
 Use environment-specific overlays or deployment tooling; do not commit live
@@ -75,7 +76,8 @@ secrets or replace the example Kubernetes image with a mutable production tag.
 ## Rollout
 
 1. Build and validate the exact commit through all required checks.
-2. Publish the image through the protected `production` environment.
+2. Build a candidate through the protected `production` environment, scan its
+   exact digest, and promote that same digest to the immutable commit tag.
 3. Verify SBOM/provenance and deploy by immutable digest.
 4. Apply secrets and configuration through the platform secret/config system.
 5. Roll out one replica, verify readiness, Redis replay behavior, GitHub API
@@ -97,7 +99,8 @@ fails to pull until deployment automation injects the reviewed release digest.
 - [ ] Management port is private and monitoring can scrape it.
 - [ ] Egress is limited to approved GitHub, model, Redis, DNS, telemetry, and
       optional Jira endpoints.
-- [ ] Image digest, SBOM, provenance, and vulnerability results are reviewed.
-- [ ] Auto-fix is disabled or has an independent human-controlled write path.
+- [ ] The promoted image digest exactly matches the digest scanned after build;
+  its SBOM, provenance, and vulnerability results are reviewed.
+- [ ] Repository `Contents: write` is disabled and fix candidates require human action.
 - [ ] Alerts, on-call ownership, rollback, and credential revocation are tested.
 - [ ] Data handling is approved for the selected model provider and region.

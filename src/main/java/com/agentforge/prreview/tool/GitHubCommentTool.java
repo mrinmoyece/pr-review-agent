@@ -143,17 +143,9 @@ public class GitHubCommentTool {
         // Auto-fixes section
         List<AutoFix> fixes = result.getAutoFixesApplied();
         if (fixes != null && !fixes.isEmpty()) {
-            long committed = fixes.stream().filter(AutoFix::isApplied).count();
-            long skipped = fixes.stream().filter(f -> !f.isApplied()).count();
-            sb.append("### Auto-Fixes Applied\n");
-            sb.append(committed).append(" fix(es) committed, ").append(skipped).append(" skipped.\n");
-            fixes.stream().filter(AutoFix::isApplied).forEach(f ->
+            sb.append("### Human-Approved Fix Candidates\n");
+            fixes.forEach(f ->
                 sb.append("- `").append(f.getFilename()).append("` — ")
-                  .append(f.getIssuesFixed()).append(" issue(s) fixed (sha: `")
-                  .append(f.getCommitSha()).append("`)\n")
-            );
-            fixes.stream().filter(f -> !f.isApplied()).forEach(f ->
-                sb.append("- `").append(f.getFilename()).append("` — skipped: ")
                   .append(f.getSkipReason()).append("\n")
             );
             sb.append("\n");

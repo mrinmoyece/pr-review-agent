@@ -99,7 +99,7 @@ management is queried inside the app container in this topology.
 
 1. **Detect:** alert on control degradation, error spikes, sustained backlog, or
    unauthorized review/write activity.
-2. **Contain:** disable the webhook or GitHub App installation; disable auto-fix;
+2. **Contain:** disable the webhook or GitHub App installation; disable fix-candidate reporting;
    revoke affected credentials.
 3. **Preserve:** retain sanitized logs, GitHub delivery IDs, review URLs, image
    digest, configuration version, and timeline.

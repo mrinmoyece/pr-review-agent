@@ -51,6 +51,7 @@ class LLMReviewToolTest {
         ReflectionTestUtils.setField(tool, "maxDiffCharacters", 10_000);
         ReflectionTestUtils.setField(tool, "maxFindingsPerPass", 25);
         ReflectionTestUtils.setField(tool, "maxChunksPerPass", 20);
+        ReflectionTestUtils.setField(tool, "verificationCandidatesPerRequest", 20);
     }
 
     @Test
@@ -177,6 +178,31 @@ class LLMReviewToolTest {
     }
 
     @Test
+    void totalDiffLimitFlushesAcceptedPendingEvidence() {
+        ReflectionTestUtils.setField(tool, "maxDiffCharacters", 30);
+        doReturn("[]").when(tool).requestCompletion(anyString(), any());
+
+        ReviewRoundResult result = tool.review(
+                ReviewPass.TESTING,
+                List.of(DiffFile.builder()
+                        .filename("src/main/java/Foo.java")
+                        .rawDiff("""
+                                diff --git a/src/main/java/Foo.java b/src/main/java/Foo.java
+                                --- a/src/main/java/Foo.java
+                                +++ b/src/main/java/Foo.java
+                                @@ -1 +1,3 @@
+                                +first();
+                                +second();
+                                +third();
+                                """)
+                        .build()),
+                List.of(), "");
+
+        assertThat(result.getStatus()).isEqualTo(ReviewRoundResult.RoundStatus.TRUNCATED);
+        assertThat(result.getChunksReviewed()).isEqualTo(1);
+    }
+
+    @Test
     void failureAfterFirstChunkReportsPartialCoverage() {
         ReflectionTestUtils.setField(tool, "chunkCharacters", 220);
         doReturn("""
@@ -235,6 +261,31 @@ class LLMReviewToolTest {
         assertThat(result.getRound().getStatus())
                 .isEqualTo(ReviewRoundResult.RoundStatus.COMPLETE);
         assertThat(result.getConfirmedComments()).containsExactly(confirmed);
+    }
+
+    @Test
+    void verificationBatchesCandidateDecisions() throws Exception {
+        ReflectionTestUtils.setField(tool, "verificationCandidatesPerRequest", 1);
+        ReviewComment first = comment("first");
+        ReviewComment second = comment("second");
+        doReturn("""
+                {"decisions":[{"findingId":"%s","verdict":"CONFIRMED",
+                "reason":"evidence"}],"newFindings":[]}
+                """.formatted(findingId(first)))
+                .doReturn("""
+                {"decisions":[{"findingId":"%s","verdict":"REJECTED",
+                "reason":"unsupported"}],"newFindings":[]}
+                """.formatted(findingId(second)))
+                .when(tool).requestCompletion(anyString(), any());
+
+        AdversarialVerificationResult result = tool.verify(
+                List.of(diff("src/main/java/Foo.java")),
+                List.of(first, second), "");
+
+        assertThat(result.getRound().getStatus())
+                .isEqualTo(ReviewRoundResult.RoundStatus.COMPLETE);
+        assertThat(result.getRound().getChunksReviewed()).isEqualTo(2);
+        assertThat(result.getConfirmedComments()).containsExactly(first);
     }
 
     @Test

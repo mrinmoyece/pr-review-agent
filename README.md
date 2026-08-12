@@ -107,7 +107,7 @@ coverage cannot produce an approval.
 **Untrusted by default** — PR content, history, ticket text, and model output are
 treated as untrusted. Findings are schema-validated and constrained to changed
 files. Repository access is default-deny, webhook deliveries are authenticated
-and deduplicated, and auto-fix is disabled unless explicitly enabled.
+and deduplicated. Optional fix-candidate reporting never writes repository content.
 
 **Severity and completeness verdict** — Critical or high findings request
 changes; incomplete coverage and advisory findings produce a comment; only a

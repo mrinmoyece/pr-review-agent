@@ -2,23 +2,13 @@ package com.agentforge.prreview.tool;
 
 import com.agentforge.prreview.model.AutoFix;
 import com.agentforge.prreview.model.ReviewComment;
-import com.azure.ai.openai.OpenAIClient;
-import com.azure.ai.openai.models.ChatChoice;
-import com.azure.ai.openai.models.ChatCompletions;
-import com.azure.ai.openai.models.ChatResponseMessage;
-import com.azure.ai.openai.models.CompletionsFinishReason;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.client.RestClient;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class GitHubAutoFixToolTest {
 
@@ -26,11 +16,7 @@ class GitHubAutoFixToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new GitHubAutoFixTool(
-                mock(RestClient.class),
-                mock(OpenAIClient.class),
-                new ObjectMapper()
-        );
+        tool = new GitHubAutoFixTool();
         ReflectionTestUtils.setField(tool, "autoFixEnabled", true);
     }
 
@@ -157,24 +143,7 @@ class GitHubAutoFixToolTest {
     }
 
     @Test
-    void tokenLimitedAutoFixResponseIsRejected() {
-        ChatCompletions completions = mock(ChatCompletions.class);
-        ChatChoice choice = mock(ChatChoice.class);
-        ChatResponseMessage message = mock(ChatResponseMessage.class);
-        when(completions.getChoices()).thenReturn(List.of(choice));
-        when(choice.getMessage()).thenReturn(message);
-        when(choice.getFinishReason()).thenReturn(CompletionsFinishReason.TOKEN_LIMIT_REACHED);
-        when(message.getContent()).thenReturn("partial");
-
-        assertThatThrownBy(() -> tool.completedContent(completions))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("incomplete");
-    }
-
-    @Test
     void givenMultipleLowCommentsOnSameFile_whenApplyFixes_thenGroupedIntoSingleEntry() {
-        // Both LOW comments on the same file should produce one AutoFix entry
-        // (either committed or skipped — here they'll be skipped since GitHub REST is mocked)
         List<ReviewComment> comments = List.of(
                 comment(ReviewComment.CommentSeverity.LOW, true, "src/main/java/Foo.java"),
                 comment(ReviewComment.CommentSeverity.LOW, true, "src/main/java/Foo.java")
@@ -182,9 +151,9 @@ class GitHubAutoFixToolTest {
 
         List<AutoFix> result = tool.applyFixes("org/repo", "feature-branch", comments);
 
-        // One entry per file, not one entry per comment
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getFilename()).isEqualTo("src/main/java/Foo.java");
+        assertThat(result.get(0).getSkipReason()).contains("human approval");
     }
 
     @Test
@@ -196,7 +165,6 @@ class GitHubAutoFixToolTest {
 
         List<AutoFix> result = tool.applyFixes("org/repo", "feature-branch", comments);
 
-        // Two files -> two entries (both will be skipped due to mocked REST client)
         assertThat(result).hasSize(2);
     }
 

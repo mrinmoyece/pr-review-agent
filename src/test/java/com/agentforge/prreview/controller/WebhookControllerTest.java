@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,7 +46,7 @@ class WebhookControllerTest {
         controller.validateConfiguration();
         when(reviewAgent.review(anyString(), anyInt(), anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(mock(ReviewResult.class)));
-        when(deliveryStore.recordIfNew(anyString())).thenReturn(true);
+        when(deliveryStore.recordIfNew(anyString(), anyString())).thenReturn(true);
     }
 
     @Test
@@ -66,7 +67,7 @@ class WebhookControllerTest {
         String replayKey = replayKey(payload);
 
         controller.handleGitHubWebhook("pull_request", signature, "delivery-2", payload);
-        when(deliveryStore.recordIfNew(replayKey)).thenReturn(false);
+        when(deliveryStore.recordIfNew(eq(replayKey), anyString())).thenReturn(false);
         var duplicate = controller.handleGitHubWebhook(
                 "pull_request", signature, "fresh-delivery-id", payload);
 
@@ -94,7 +95,7 @@ class WebhookControllerTest {
                 "pull_request", signature(payload), "delivery-failed", payload);
         failure.completeExceptionally(new IllegalStateException("provider unavailable"));
 
-        verify(deliveryStore).release(replayKey(payload));
+        verify(deliveryStore).release(eq(replayKey(payload)), anyString());
     }
 
     @Test

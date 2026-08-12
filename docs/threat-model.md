@@ -12,7 +12,7 @@ Protected assets:
 - webhook authenticity and delivery state;
 - review integrity, completeness, and attribution;
 - optional Jira content;
-- write access when auto-fix is explicitly enabled.
+- review publication access; repository-content writes are prohibited.
 
 ## Actors and trust boundaries
 
@@ -33,7 +33,7 @@ flowchart LR
     O -->|attacker-controlled data| L[LLM boundary]
     L -->|untrusted JSON| V[Schema and diff validation]
     V --> P[GitHub review]
-    O -. disabled by default .-> X[Restricted auto-fix]
+    O -. disabled by default .-> X[Fix candidate reporting]
 ```
 
 ## Abuse cases and controls
@@ -46,7 +46,7 @@ flowchart LR
 | Prompt injection | Random trust markers, system instructions, no model tool execution | A model can still produce plausible but incorrect findings |
 | Malformed or fabricated findings | JSON parsing, changed-file validation, added-line anchoring, length and count caps | General findings without a line still require human judgment |
 | Incomplete review presented as approval | Per-round status, hunkless/binary-change detection, adversarial empty-result review, completeness gate | GitHub policy must require the review/check expected by the organization |
-| Unauthorized writes | Model write flags discarded, trusted low-style eligibility policy, auto-fix off by default, fork/unknown-head protection, Java source allowlist, least-privilege token | Enabling write permission increases blast radius |
+| Unauthorized writes | No repository-content write implementation, model write flags discarded, trusted low-style candidate policy, Java source allowlist, least-privilege token | A future write feature would require a new threat review and human approval boundary |
 | Secret leakage through logs/prompts | Separate credentials, bounded data, log sanitization, secret scanning | Source diffs are sent to the configured model provider |
 | Resource exhaustion | Request cap, diff/chunk/finding/token budgets, bounded executors | Many allowed repositories can still create sustained load |
 | Supply-chain compromise | Action SHA enforcement/allowlist, Gradle checksums, CodeQL, Gitleaks, Trivy, SBOM | A trusted pinned artifact may later be discovered vulnerable |
@@ -57,7 +57,8 @@ flowchart LR
 1. Unauthenticated or disallowed requests never start reviews.
 2. Model output never grants authorization or expands write scope.
 3. Failed, capped, or truncated model coverage never approves.
-4. Auto-fix never runs by default and never targets protected paths.
+4. The agent never writes repository content; optional candidate reporting never
+   targets protected paths.
 5. Redis failure rejects webhook processing rather than bypassing replay checks.
 6. Production identities use only the permissions required by enabled features.
 
@@ -66,6 +67,8 @@ flowchart LR
 Repository diffs, review history, and optional ticket text leave the service for
 the configured model endpoint. Deployers must choose a provider, region,
 retention policy, and contract appropriate for source-code classification.
+Provider selection is explicit and fails startup when that provider's endpoint
+or credential is missing; configuration never falls through to another provider.
 Avoid production payloads in tests. Logs must not contain credentials or raw
 authorization headers. Delivery identifiers expire; review results persist in
 GitHub according to repository retention.

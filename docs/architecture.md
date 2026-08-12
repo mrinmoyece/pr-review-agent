@@ -76,7 +76,7 @@ never converted into an approval.
 | Deterministic scan tools | Security, architecture, and performance evidence |
 | `ReviewHistoryTool` | Bounded repository-specific advisory context |
 | `LLMReviewTool` | Specialist calls, chunking, validation, and retries |
-| `GitHubAutoFixTool` | Opt-in write path limited to trusted deterministic eligibility and Java source roots |
+| `GitHubAutoFixTool` | Opt-in reporting of human-approved fix candidates; no repository writes |
 | `GitHubCommentTool` | Review and coverage publication |
 | `RedisWebhookDeliveryStore` | Cross-replica replay protection |
 
@@ -107,10 +107,12 @@ does not determine or override the verdict.
 Outer reviews use `reviewExecutor`; inner static and specialist work uses
 `reviewFanOutExecutor`. Separate bounded pools avoid nested-pool starvation.
 Adversarial verification remains sequential because it consumes the specialist
-aggregate. Model calls have retry limits, diff and finding budgets, and explicit
-incomplete states. Chunk-count limits bound request fan-out, and continuation
-chunks carry adjusted hunk coordinates. If verification cannot inspect complete
-evidence, candidates remain visible while the round fails closed.
+aggregate, but candidate decisions are split into bounded response batches.
+Missed-finding discovery runs once. Model calls have retry limits, diff and
+finding budgets, and explicit incomplete states. Chunk-count limits bound request
+fan-out, continuation chunks carry adjusted hunk coordinates, and accepted
+in-budget evidence is flushed before truncation. If verification cannot inspect
+complete evidence, candidates remain visible while the round fails closed.
 
 See [ADR-0002](adr/0002-separate-review-executors.md) and
 [Operations](operations.md).
@@ -120,8 +122,9 @@ See [ADR-0002](adr/0002-separate-review-executors.md) and
 Production manifests run two non-root replicas with read-only filesystems,
 resource limits, health probes, a disruption budget, and a network policy.
 Redis must be shared by all replicas. Port 8080 serves webhooks; port 9090 is
-management-only. Images are published by immutable commit tag with SBOM and
-provenance.
+management-only. The release job builds a candidate once with SBOM and
+provenance, scans that exact digest, then promotes the same digest to the
+immutable commit tag.
 
 Deployment requirements and rollback are in
 [Enterprise deployment](enterprise-deployment.md).

@@ -18,7 +18,9 @@ payload and signature with a substituted delivery ID. Every replica uses the sam
 store. Retain the reservation while processing and after success; release it if
 asynchronous processing fails so a redelivery can retry transient failure. If
 reservation cannot be verified, reject processing rather than bypassing replay
-protection.
+protection. Each reservation stores an unpredictable ownership token. Failure
+release uses an atomic compare-and-delete operation, so an expired reservation's
+late callback cannot delete a newer reservation for the same payload.
 
 ## Alternatives
 

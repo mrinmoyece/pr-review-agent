@@ -84,6 +84,7 @@ review:
     max-diff-characters: ${REVIEW_LLM_MAX_DIFF_CHARACTERS:120000}
     max-findings-per-pass: ${REVIEW_LLM_MAX_FINDINGS_PER_PASS:25}
     max-chunks-per-pass: ${REVIEW_LLM_MAX_CHUNKS_PER_PASS:20}
+    verification-candidates-per-request: ${REVIEW_LLM_VERIFICATION_BATCH_SIZE:20}
   history:
     pr-count: ${REVIEW_HISTORY_PR_COUNT:20}
 

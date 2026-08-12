@@ -39,7 +39,7 @@ The following are release requirements even though model responses vary:
 - output and diff budgets are enforced;
 - failed or incomplete rounds cannot approve;
 - attacker-controlled text remains inside randomized trust markers;
-- auto-fix remains opt-in and path-restricted.
+- fix-candidate reporting remains opt-in and autonomous writes remain prohibited.
 
 Prompt or parser changes require fixtures for malformed output, injected
 instructions, excessive findings, invalid files, and invalid line numbers.

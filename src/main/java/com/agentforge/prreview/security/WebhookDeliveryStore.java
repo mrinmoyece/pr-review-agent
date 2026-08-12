@@ -10,10 +10,10 @@ public interface WebhookDeliveryStore {
      *
      * @return true only when the delivery ID was not already present
      */
-    boolean recordIfNew(String replayKey);
+    boolean recordIfNew(String replayKey, String reservationToken);
 
     /**
      * Releases a reservation after processing fails so GitHub can redeliver it.
      */
-    void release(String replayKey);
+    void release(String replayKey, String reservationToken);
 }
