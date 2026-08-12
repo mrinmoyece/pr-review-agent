@@ -52,10 +52,17 @@ to the GitHub webhook source where infrastructure supports it. Restrict egress
 to GitHub, the selected LLM endpoint, Jira when enabled, DNS, and telemetry
 destinations.
 
-Keep `REVIEW_AUTO_FIX_ENABLED=false` unless a separate, least-privilege write
-identity and mandatory human approval workflow are implemented. An incomplete
-specialist round produces a non-approval result and must not satisfy a merge
-gate.
+The checked-in network policy admits port 8080 only from labeled
+`ingress-nginx` pods and port 9090 only from labeled Prometheus pods. It permits
+same-namespace labeled Redis and `kube-system` DNS. External HTTPS uses the
+fail-closed documentation-range sentinel `192.0.2.1/32`; deployment automation
+must replace it with approved API CIDRs or an equivalent platform FQDN policy.
+Adjust namespace and pod labels to the actual platform before rollout. External
+Redis similarly requires an explicit approved CIDR/FQDN overlay.
+
+Keep `REVIEW_AUTO_FIX_ENABLED=false` unless fix-candidate reporting is wanted;
+the agent never writes repository content. An incomplete specialist round
+produces a non-approval result and must not satisfy a merge gate.
 
 ## Configuration ownership
 

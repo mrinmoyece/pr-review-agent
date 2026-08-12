@@ -6,7 +6,6 @@ import com.agentforge.prreview.model.ReviewResult;
 import com.agentforge.prreview.model.ReviewRoundResult;
 import com.agentforge.prreview.model.TicketAlignment;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,7 +32,6 @@ public class GitHubCommentTool {
     @Value("${github.token}")
     private String githubToken;
 
-    @Retry(name = "github")
     @CircuitBreaker(name = "github", fallbackMethod = "postReviewFallback")
     public void postReview(String repoFullName, int prNumber, ReviewResult result) {
         log.info("Posting review to {}/#{} — verdict={} comments={}",

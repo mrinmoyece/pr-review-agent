@@ -27,7 +27,7 @@ public class GitHubDiffTool {
     @Value("${github.token}")
     private String githubToken;
 
-    @Retry(name = "github")
+    @Retry(name = "github-read")
     @CircuitBreaker(name = "github", fallbackMethod = "fetchDiffFallback")
     public String fetchDiff(String repoFullName, int prNumber) {
         log.info("Fetching diff for {}/#{}", repoFullName, prNumber);

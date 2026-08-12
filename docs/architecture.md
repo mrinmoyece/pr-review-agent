@@ -80,6 +80,10 @@ never converted into an approval.
 | `GitHubCommentTool` | Review and coverage publication |
 | `RedisWebhookDeliveryStore` | Cross-replica replay protection |
 
+GitHub reads use bounded retries for response and transport failures. Review
+publication is intentionally not retried in-process because it is a
+non-idempotent POST; failures surface for controlled redelivery/reconciliation.
+
 ## State and consistency
 
 - Review state lives in the asynchronous request lifecycle and is not resumable.

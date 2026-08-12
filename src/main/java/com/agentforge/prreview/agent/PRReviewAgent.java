@@ -133,8 +133,6 @@ public class PRReviewAgent {
 
             List<ReviewRoundResult> rounds = new ArrayList<>();
             specialistFutures.forEach(future -> rounds.add(future.join()));
-            List<ReviewComment> commentsBeforeVerification = new ArrayList<>(staticComments);
-            rounds.forEach(round -> commentsBeforeVerification.addAll(round.getComments()));
 
             List<ReviewComment> specialistComments = rounds.stream()
                     .flatMap(round -> round.getComments().stream())

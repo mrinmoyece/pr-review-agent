@@ -50,7 +50,8 @@ flowchart LR
 | Secret leakage through logs/prompts | Separate credentials, bounded data, log sanitization, secret scanning | Source diffs are sent to the configured model provider |
 | Resource exhaustion | Request cap, diff/chunk/finding/token budgets, bounded executors | Many allowed repositories can still create sustained load |
 | Supply-chain compromise | Action SHA enforcement/allowlist, Gradle checksums, CodeQL, Gitleaks, Trivy, SBOM | A trusted pinned artifact may later be discovered vulnerable |
-| Management endpoint exposure | Separate port and deployment network boundary | Kubernetes policy must be narrowed to the actual monitoring namespace |
+| Management endpoint exposure | Separate port; ingress restricted to labeled monitoring namespace/pods | Platform overlays must preserve selector isolation |
+| Network exfiltration | Default-deny policy, selected DNS/Redis pods, fail-closed external HTTPS CIDR sentinel | Platform must inject approved API CIDRs or enforce equivalent FQDN policy |
 
 ## Security invariants
 

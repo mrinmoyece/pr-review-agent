@@ -38,11 +38,12 @@ github:
 resilience4j:
   retry:
     instances:
-      github:
+      github-read:
         max-attempts: 3
         wait-duration: 2s
         retry-exceptions:
           - org.springframework.web.client.RestClientResponseException
+          - org.springframework.web.client.ResourceAccessException
       llm:
         max-attempts: 3
         wait-duration: 5s

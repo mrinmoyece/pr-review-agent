@@ -29,7 +29,10 @@ publication failure, replay-store failure, and security-control degradation.
 
 Management traffic must remain internal. Production monitoring should scrape
 through an authenticated/private network path and narrow Kubernetes ingress to
-the monitoring namespace.
+the monitoring namespace. Before deployment, replace the manifest's fail-closed
+external HTTPS CIDR sentinel with approved GitHub, model-provider, and optional
+Jira destinations (or an equivalent FQDN policy), and align ingress, monitoring,
+DNS, and Redis selectors with platform labels.
 
 ## Operational checks
 
