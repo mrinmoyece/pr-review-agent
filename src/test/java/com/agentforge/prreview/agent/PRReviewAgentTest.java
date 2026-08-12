@@ -58,8 +58,9 @@ class PRReviewAgentTest {
                 .filename("src/main/java/Foo.java")
                 .rawDiff("@@ -1 +1 @@\n+changed\n")
                 .build();
-        when(diffTool.fetchDiff(REPOSITORY, 42, "abc123")).thenReturn("diff");
-        when(diffTool.fetchCurrentHeadSha(REPOSITORY, 42)).thenReturn("abc123");
+        when(diffTool.fetchPrShas(REPOSITORY, 42))
+                .thenReturn(new GitHubDiffTool.PrShas("abc123", "base456"));
+        when(diffTool.fetchDiff(REPOSITORY, "base456", "abc123")).thenReturn("diff");
         when(diffTool.parseDiff("diff")).thenReturn(List.of(file));
         when(securityTool.scan(any())).thenReturn(List.of());
         when(architectureTool.check(any())).thenReturn(List.of());

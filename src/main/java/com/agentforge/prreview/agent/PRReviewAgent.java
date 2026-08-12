@@ -97,12 +97,21 @@ public class PRReviewAgent {
             if (!allowedRepositories().contains(repoFullName)) {
                 throw new ReviewAgentException("Repository is not in the configured allowlist");
             }
-            // Always resolve a concrete head SHA so the staleness guard and commit_id
-            // pinning work for every code path, including the manual trigger.
-            String pinnedSha = (headSha != null && !headSha.isBlank())
-                    ? headSha
-                    : gitHubDiffTool.fetchCurrentHeadSha(repoFullName, prNumber);
-            String diff = gitHubDiffTool.fetchDiff(repoFullName, prNumber, pinnedSha);
+            // Resolve head and base SHAs in a single atomic call. If headSha was
+            // supplied by the webhook, verify it still matches (the caller's SHA may
+            // already be stale before we even start). Either way the diff is fetched
+            // via the immutable compare endpoint so its content cannot change.
+            GitHubDiffTool.PrShas prShas = gitHubDiffTool.fetchPrShas(repoFullName, prNumber);
+            if (headSha != null && !headSha.isBlank() && !headSha.equals(prShas.headSha())) {
+                log.warn("PR head moved before review started for {}/#{}: webhook={} current={}",
+                        safeRepoFullName, prNumber, headSha, prShas.headSha());
+                throw new ReviewAgentException(
+                        "PR head changed before review started; aborting to avoid stale verdict");
+            }
+            String pinnedSha = prShas.headSha();
+            // Fetch diff via immutable SHA-to-SHA compare endpoint; content is stable
+            // regardless of subsequent pushes to the PR branch.
+            String diff = gitHubDiffTool.fetchDiff(repoFullName, prShas.baseSha(), pinnedSha);
             if (diff == null || diff.isBlank()) {
                 throw new ReviewAgentException("GitHub returned an empty diff; refusing to approve");
             }
@@ -177,17 +186,9 @@ public class PRReviewAgent {
                     .reviewedAt(Instant.now())
                     .build();
 
-            // Before publishing, verify the PR head has not moved since the review started.
-            // pinnedSha is always set (either from the webhook or fetched above), so this
-            // guard runs for every code path including the manual trigger.
-            String currentSha = gitHubDiffTool.fetchCurrentHeadSha(repoFullName, prNumber);
-            if (!pinnedSha.equals(currentSha)) {
-                log.warn("PR head moved during review for {}/#{}: reviewed={} current={}",
-                        safeRepoFullName, prNumber, pinnedSha, currentSha);
-                throw new ReviewAgentException(
-                        "PR head changed since review started; aborting to avoid stale verdict");
-            }
-
+            // The diff was fetched via the immutable compare endpoint so its content
+            // is already bound to pinnedSha. Publish with commit_id to anchor the
+            // GitHub review record to the reviewed commit.
             gitHubCommentTool.postReview(repoFullName, prNumber, pinnedSha, result);
             log.info("Review posted - verdict={} score={} complete={}", verdict, score, reviewComplete);
             return CompletableFuture.completedFuture(result);
