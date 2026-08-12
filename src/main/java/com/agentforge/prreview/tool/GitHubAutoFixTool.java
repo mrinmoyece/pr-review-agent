@@ -41,12 +41,12 @@ public class GitHubAutoFixTool {
                 .toList();
 
         if (eligible.isEmpty()) {
-            log.info("No auto-fixable comments for {}", repoFullName);
+            log.info("No findings qualify for fix-candidate reporting");
             return List.of();
         }
 
-        log.info("{} findings require human-approved fixes on branch {} of {}",
-                eligible.size(), branchRef, repoFullName);
+        log.info("{} findings require human approval; repository writes are disabled",
+                eligible.size());
         Map<String, List<ReviewComment>> byFile = new LinkedHashMap<>();
         for (ReviewComment c : eligible) {
             byFile.computeIfAbsent(c.getFilename(), key -> new ArrayList<>()).add(c);
