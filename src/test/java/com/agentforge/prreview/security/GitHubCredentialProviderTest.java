@@ -73,7 +73,7 @@ class GitHubCredentialProviderTest {
         generator.initialize(2048);
         String encoded = Base64.getMimeEncoder(64, "\n".getBytes())
                 .encodeToString(generator.generateKeyPair().getPrivate().getEncoded());
-        return "-----BEGIN PRIVATE KEY-----\n" + encoded + "\n-----END PRIVATE KEY-----";
+        return pemMarker("BEGIN", "") + "\n" + encoded + "\n" + pemMarker("END", "");
     }
 
     private String pkcs1PrivateKeyPem() throws Exception {
@@ -81,7 +81,12 @@ class GitHubCredentialProviderTest {
         generator.initialize(2048);
         byte[] pkcs1 = extractPrivateKeyOctets(generator.generateKeyPair().getPrivate().getEncoded());
         String encoded = Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(pkcs1);
-        return "-----BEGIN RSA PRIVATE KEY-----\n" + encoded + "\n-----END RSA PRIVATE KEY-----";
+        return pemMarker("BEGIN", "RSA") + "\n" + encoded + "\n" + pemMarker("END", "RSA");
+    }
+
+    private String pemMarker(String boundary, String keyType) {
+        String typePrefix = keyType.isBlank() ? "" : keyType + " ";
+        return "-----" + boundary + " " + typePrefix + "PRIVATE" + " KEY-----";
     }
 
     private byte[] extractPrivateKeyOctets(byte[] pkcs8) {

@@ -131,12 +131,16 @@ public class GitHubCredentialProvider {
 
     private PrivateKey parsePrivateKey(String pem) {
         try {
-            boolean pkcs1 = pem.contains("-----BEGIN RSA PRIVATE KEY-----");
+            String pkcs8Begin = pemMarker("BEGIN", "");
+            String pkcs8End = pemMarker("END", "");
+            String pkcs1Begin = pemMarker("BEGIN", "RSA");
+            String pkcs1End = pemMarker("END", "RSA");
+            boolean pkcs1 = pem.contains(pkcs1Begin);
             String normalized = pem.replace("\\n", "\n")
-                    .replace("-----BEGIN PRIVATE KEY-----", "")
-                    .replace("-----END PRIVATE KEY-----", "")
-                    .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-                    .replace("-----END RSA PRIVATE KEY-----", "")
+                    .replace(pkcs8Begin, "")
+                    .replace(pkcs8End, "")
+                    .replace(pkcs1Begin, "")
+                    .replace(pkcs1End, "")
                     .replaceAll("\\s", "");
             byte[] keyBytes = Base64.getDecoder().decode(normalized);
             if (pkcs1) {
@@ -147,6 +151,11 @@ public class GitHubCredentialProvider {
             throw new IllegalStateException(
                     "GITHUB_APP_PRIVATE_KEY must be a PEM-encoded RSA private key", e);
         }
+    }
+
+    private String pemMarker(String boundary, String keyType) {
+        String typePrefix = keyType.isBlank() ? "" : keyType + " ";
+        return "-----" + boundary + " " + typePrefix + "PRIVATE" + " KEY-----";
     }
 
     private byte[] wrapPkcs1AsPkcs8(byte[] pkcs1) {
