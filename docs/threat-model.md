@@ -3,7 +3,8 @@
 ## Scope and assets
 
 This model covers webhook ingestion, GitHub and Jira reads, model inference,
-review publication, optional auto-fix, replay state, logs, and metrics.
+review publication, optional human-action fix-candidate reporting, replay state,
+logs, and metrics.
 
 Protected assets:
 
@@ -21,7 +22,7 @@ Protected assets:
 | Pull-request author | Untrusted; controls diff, title, body, filenames, and comments |
 | Webhook sender | Untrusted until HMAC, event, repository, and delivery checks pass |
 | Model | Probabilistic and untrusted; output is data requiring validation |
-| GitHub/Jira API | Authenticated dependency that can fail, throttle, or return malformed data |
+| GitHub/Jira API | Authenticated dependency that can fail, throttle, or return malformed data; GitHub App tokens refresh before expiry |
 | Operator | Trusted to configure secrets, identities, allowlists, and network policy |
 | Dependency/action publisher | Supply-chain actor constrained by checksums, SHA pins, and scans |
 
@@ -46,7 +47,7 @@ flowchart LR
 | Prompt injection | Random trust markers, system instructions, no model tool execution | A model can still produce plausible but incorrect findings |
 | Malformed or fabricated findings | JSON parsing, changed-file validation, added-line anchoring, length and count caps | General findings without a line still require human judgment |
 | Incomplete review presented as approval | Per-round status, hunkless/binary-change detection, adversarial empty-result review, completeness gate | GitHub policy must require the review/check expected by the organization |
-| Unauthorized writes | No repository-content write implementation, model write flags discarded, trusted low-style candidate policy, Java source allowlist, least-privilege token | A future write feature would require a new threat review and human approval boundary |
+| Unauthorized writes | No repository-content write implementation, model write flags discarded, trusted low-style candidate policy, Java source allowlist, GitHub App lacks Contents write | A future write feature would require a new threat review and human approval boundary |
 | Secret leakage through logs/prompts | Separate credentials, bounded data, log sanitization, secret scanning | Source diffs are sent to the configured model provider |
 | Resource exhaustion | Request cap, diff/chunk/finding/token budgets, bounded executors | Many allowed repositories can still create sustained load |
 | Supply-chain compromise | Action SHA enforcement/allowlist, Gradle checksums, CodeQL, Gitleaks, Trivy, SBOM | A trusted pinned artifact may later be discovered vulnerable |

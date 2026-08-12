@@ -26,7 +26,7 @@ flowchart LR
 | Boundary | Authentication | Data handled |
 |---|---|---|
 | GitHub webhook | `X-Hub-Signature-256` HMAC | Repository identity, PR metadata |
-| GitHub API | Least-privilege GitHub App token preferred | Diff, history, review output |
+| GitHub API | Refreshing least-privilege GitHub App installation token in production | Diff, history, review output |
 | Model API | Separate inference credential | Bounded diff chunks and advisory context |
 | Redis | Network policy and optional password/TLS provided by deployment | Authenticated payload hashes with expiry |
 | Jira | Optional account and token | Ticket text and alignment result |
@@ -71,6 +71,7 @@ never converted into an approval.
 | Component | Responsibility |
 |---|---|
 | `WebhookController` | External request validation and trigger policy |
+| `GitHubCredentialProvider` | GitHub App JWT signing and installation-token refresh |
 | `PRReviewAgent` | Review lifecycle and verdict orchestration |
 | `GitHubDiffTool` | Diff retrieval and changed-line parsing |
 | Deterministic scan tools | Security, architecture, and performance evidence |
@@ -83,6 +84,9 @@ never converted into an approval.
 GitHub reads use bounded retries for response and transport failures. Review
 publication is intentionally not retried in-process because it is a
 non-idempotent POST; failures surface for controlled redelivery/reconciliation.
+Production API calls obtain credentials from the shared provider, which refreshes
+GitHub App installation tokens five minutes before expiry. Static token mode is
+limited to local development.
 
 ## State and consistency
 
@@ -125,9 +129,11 @@ See [ADR-0002](adr/0002-separate-review-executors.md) and
 
 Production manifests run two non-root replicas with read-only filesystems,
 resource limits, health probes, a disruption budget, and a network policy.
-Redis must be shared by all replicas. Port 8080 serves webhooks; port 9090 is
-management-only. The release job builds a candidate once with SBOM and
-provenance, scans that exact digest, then promotes the same digest to the
+Redis must be shared by all replicas and is included in the readiness group, so
+pods leave service when replay protection is unavailable. Port 8080 serves
+webhooks; port 9090 is management-only. CodeQL runs in the same CI workflow and
+must pass before publication. The release job builds a candidate once with SBOM
+and provenance, scans that exact digest, then promotes the same digest to the
 immutable commit tag.
 
 Deployment requirements and rollback are in

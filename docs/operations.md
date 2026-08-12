@@ -22,7 +22,8 @@ publication failure, replay-store failure, and security-control degradation.
 
 - Application traffic: port 8080.
 - Health and Prometheus: management port 9090.
-- Readiness: `/actuator/health/readiness`.
+- Readiness: `/actuator/health/readiness`; includes application readiness state
+  and Redis because replay protection is mandatory.
 - Liveness: `/actuator/health/liveness`.
 - Metrics: `/actuator/prometheus`.
 - Prometheus configuration: `observability/prometheus.yml`.
@@ -82,10 +83,11 @@ management is queried inside the app container in this topology.
 
 ### Reviews complete but are not posted
 
-1. Check GitHub App installation, repository access, token expiry, and
-   `Pull requests: write`.
+1. Check GitHub App installation, repository access, App ID, installation ID,
+   private key validity, and `Pull requests: write`.
 2. Check API rate limits and GitHub status.
-3. Re-run with a fresh installation token after correcting permissions.
+3. After correcting configuration or permissions, verify that the credential
+   provider can mint an installation token; it refreshes tokens automatically.
 4. Confirm the original result did not appear before retrying to avoid duplicate
    review noise.
 
@@ -126,7 +128,8 @@ non-production test PR before restoring normal traffic.
 
 ## Secret rotation
 
-Rotate GitHub App credentials, model credentials, webhook secret, Redis
-credentials, and optional Jira token independently. During webhook-secret
-rotation, coordinate GitHub and service rollout to avoid an unsigned acceptance
-window. Revoke old credentials after the new path is verified.
+Rotate the GitHub App private key, model credentials, webhook secret, Redis
+credentials, and optional Jira token independently. Verify installation-token
+minting after App key rotation. During webhook-secret rotation, coordinate
+GitHub and service rollout to avoid an unsigned acceptance window. Revoke old
+credentials after the new path is verified.

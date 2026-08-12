@@ -28,8 +28,9 @@ Update the owning document when behavior changes.
 - Validate model findings against changed files and added-line anchors.
 - Keep input, output, diff, chunk, and finding budgets explicit and bounded.
 - Failed, truncated, or capped review rounds must never approve.
-- Keep auto-fix disabled by default, discard model write flags, and preserve its
-  Java source-path allowlist.
+- Keep fix-candidate reporting disabled by default, discard model write flags,
+  preserve its Java source-path allowlist, and never add autonomous repository
+  writes without a new security design and human approval boundary.
 - Outer review work and inner fan-out must remain on separate bounded executors.
 - Do not weaken HMAC, repository allowlisting, Redis replay protection, or
   least-privilege GitHub permissions to improve availability.

@@ -10,6 +10,9 @@ Copy `.env.example` to `.env`, provide non-production credentials, start Redis,
 replace the example Grafana password, and run the application:
 
 ```bash
+set -a
+source .env
+set +a
 docker compose up -d redis
 ./gradlew bootRun
 ```
@@ -31,8 +34,9 @@ pull request. Security and release evidence is defined in
 
 ## Change requirements
 
-Changes to webhooks, prompts, GitHub permissions, write-capable tools, workflows,
-or deployment manifests require a security-focused review from CODEOWNERS.
+Changes to webhooks, prompts, GitHub credentials or permissions, fix-candidate
+policy, workflows, or deployment manifests require a security-focused review
+from CODEOWNERS.
 Add tests for success, rejection, timeout, malformed model output, and
 prompt-injection cases when changing an agent boundary.
 

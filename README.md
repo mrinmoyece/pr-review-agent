@@ -118,7 +118,9 @@ complete review without findings approves. The 0-100 score summarizes severity
 but does not override those safety rules. See
 [Architecture](docs/architecture.md#verdict-semantics).
 
-**Dual LLM support** — Azure OpenAI in CI/CD pipelines, GitHub Models for local dev and open source contributors.
+**Dual LLM support** — Azure OpenAI for production deployments and GitHub Models
+for local development. Provider selection is explicit and fails closed when the
+selected provider is not configured.
 
 ## Tech Stack
 
@@ -127,7 +129,7 @@ but does not override those safety rules. See
 | Framework | Spring Boot 3.5.16, Java 21 |
 | LLM | Azure OpenAI GPT-4o / GitHub Models |
 | Security Scanning | OWASP rules, CodeQL, dependency review, Gitleaks, Trivy |
-| GitHub Integration | kohsuke/github-api + Webhooks |
+| GitHub Integration | GitHub REST API + signed webhooks + refreshing GitHub App credentials |
 | Resilience | Resilience4j |
 | Observability | Micrometer, Prometheus |
 | CI/CD | SHA-pinned GitHub Actions, CodeQL, OpenSSF Scorecard, SBOM/provenance |

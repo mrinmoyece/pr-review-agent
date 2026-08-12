@@ -104,7 +104,8 @@ fails to pull until deployment automation injects the reviewed release digest.
 
 ## Production acceptance checklist
 
-- [ ] GitHub App is repository-scoped and uses short-lived installation tokens.
+- [ ] GitHub App is repository-scoped; runtime token minting and pre-expiry refresh
+      work with the deployed App ID, installation ID, and private key.
 - [ ] API and model credentials are separate and rotation-tested.
 - [ ] Webhook HMAC, authenticated replay keys, delivery metadata, repository allowlist, and Redis fail-closed
       behavior are verified.

@@ -16,10 +16,11 @@ want attribution.
 
 ## Security boundaries
 
-Deploy the service with a GitHub App installation token scoped to only approved
-repositories. Auto-fix is disabled by default. PR diffs, ticket text, review
-history, and model output are untrusted and must never be used as authorization
-or unrestricted write instructions.
+Deploy the service in GitHub App mode, installed only on approved repositories.
+The runtime mints and refreshes short-lived installation tokens; static token
+mode is for local development only. Fix-candidate reporting is disabled by
+default and never writes repository content. PR diffs, ticket text, review
+history, and model output are untrusted and must never grant authorization.
 
 The canonical assets, actors, abuse cases, controls, residual risks, and privacy
 assumptions are documented in the [threat model](docs/threat-model.md).
