@@ -28,7 +28,8 @@ public class GitHubDiffTool {
     @Retry(name = "github-read")
     @CircuitBreaker(name = "github", fallbackMethod = "fetchDiffFallback")
     public String fetchDiff(String repoFullName, int prNumber, String headSha) {
-        log.info("Fetching diff for {}/#{} (expected head {})", repoFullName, prNumber, headSha);
+        log.info("Fetching diff for {}/#{} (expected head {})",
+                sanitize(repoFullName), prNumber, sanitize(headSha));
         return gitHubRestClient.get()
                 .uri("/repos/{repo}/pulls/{pr}", repoFullName, prNumber)
                 .header("Authorization", "Bearer " + credentialProvider.token())
@@ -140,5 +141,10 @@ public class GitHubDiffTool {
         if (filename.endsWith(".sql"))        return "sql";
         if (filename.endsWith(".xml"))        return "xml";
         return "unknown";
+    }
+
+    private static String sanitize(String value) {
+        if (value == null) return "null";
+        return value.replace('\n', '_').replace('\r', '_');
     }
 }
