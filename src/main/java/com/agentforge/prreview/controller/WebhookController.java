@@ -103,7 +103,8 @@ public class WebhookController {
         try {
             root = objectMapper.readTree(payload);
         } catch (Exception e) {
-            log.error("Malformed webhook payload: {}", e.getMessage());
+            log.error("Malformed webhook payload: {}",
+                    sanitizeForLog(e.getMessage()));
             return ResponseEntity.badRequest().body(Map.of("error", "Malformed JSON payload"));
         }
 
@@ -128,7 +129,7 @@ public class WebhookController {
         try {
             prNumber = prNumberNode.isInt() ? prNumberNode.intValue() : Integer.parseInt(prNumberNode.asText());
         } catch (NumberFormatException e) {
-            log.error("Could not parse PR number from webhook payload: {}", prNumberNode.asText());
+            log.error("Could not parse PR number from webhook payload");
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid PR number in payload"));
         }
 
@@ -157,8 +158,9 @@ public class WebhookController {
                     prBody != null ? prBody : "");
             future.whenComplete((result, failure) -> {
                 if (failure != null) {
-                    log.error("Review failed for {}/#{}: {}",
-                            repo, prNumber, sanitizeForLog(failure.getMessage()), failure);
+                    log.error("Review failed for {}/#{} [{}]: {}",
+                            repo, prNumber, failure.getClass().getSimpleName(),
+                            sanitizeForLog(failure.getMessage()));
                     releaseFailedDelivery(replayKey, deliveryId);
                 }
             });
@@ -203,7 +205,8 @@ public class WebhookController {
             String expected = "sha256=" + HexFormat.of().formatHex(hash);
             return constantTimeEquals(expected, signatureHeader);
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-            log.error("Signature validation error: {}", e.getMessage());
+            log.error("Signature validation error [{}]: {}",
+                    e.getClass().getSimpleName(), sanitizeForLog(e.getMessage()));
             return false;
         }
     }
@@ -254,9 +257,9 @@ public class WebhookController {
         try {
             webhookDeliveryStore.release(replayKey);
         } catch (RuntimeException releaseFailure) {
-            log.error("Could not release failed webhook delivery {}: {}",
-                    sanitizeForLog(deliveryId),
-                    sanitizeForLog(releaseFailure.getMessage()), releaseFailure);
+            log.error("Could not release failed webhook delivery {} [{}]: {}",
+                    sanitizeForLog(deliveryId), releaseFailure.getClass().getSimpleName(),
+                    sanitizeForLog(releaseFailure.getMessage()));
         }
     }
 }
