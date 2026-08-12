@@ -232,12 +232,19 @@ public class WebhookController {
         return (value == null || value.isNull()) ? null : value.asText();
     }
 
+    private String sanitizeForLog(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replaceAll("[\\r\\n\\t\\f\\u0000-\\u001F\\u007F]", "_");
+    }
+
     private void releaseFailedDelivery(String deliveryId) {
         try {
             webhookDeliveryStore.release(deliveryId);
         } catch (RuntimeException releaseFailure) {
             log.error("Could not release failed webhook delivery {}: {}",
-                    deliveryId, releaseFailure.getMessage(), releaseFailure);
+                    sanitizeForLog(deliveryId), releaseFailure.getMessage(), releaseFailure);
         }
     }
 }
