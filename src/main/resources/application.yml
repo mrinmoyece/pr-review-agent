@@ -27,6 +27,12 @@ azure:
 
 github:
   token: ${GITHUB_TOKEN:}
+  auth:
+    mode: ${GITHUB_AUTH_MODE:token}
+  app:
+    id: ${GITHUB_APP_ID:}
+    installation-id: ${GITHUB_APP_INSTALLATION_ID:}
+    private-key: ${GITHUB_APP_PRIVATE_KEY:}
   repository-allowlist: ${GITHUB_REPOSITORY_ALLOWLIST:}
   webhook:
     secret: ${GITHUB_WEBHOOK_SECRET:}
@@ -101,6 +107,9 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+      group:
+        readiness:
+          include: readinessState,redis
   metrics:
     tags:
       application: ${spring.application.name}

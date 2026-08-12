@@ -3,6 +3,7 @@ package com.agentforge.prreview.tool;
 import com.agentforge.prreview.model.ReviewPass;
 import com.agentforge.prreview.model.ReviewResult;
 import com.agentforge.prreview.model.ReviewRoundResult;
+import com.agentforge.prreview.security.GitHubCredentialProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
@@ -15,7 +16,8 @@ class GitHubCommentToolTest {
 
     @Test
     void coverageTableIncludesChunksAndEscapedDetail() {
-        GitHubCommentTool tool = new GitHubCommentTool(mock(RestClient.class));
+        GitHubCommentTool tool = new GitHubCommentTool(
+                mock(RestClient.class), mock(GitHubCredentialProvider.class));
         ReviewRoundResult round = ReviewRoundResult.builder()
                 .pass(ReviewPass.SECURITY)
                 .status(ReviewRoundResult.RoundStatus.TRUNCATED)

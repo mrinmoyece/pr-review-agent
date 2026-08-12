@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.agentforge.prreview.security.GitHubCredentialProvider;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,9 +38,7 @@ public class ReviewHistoryTool {
     private final RestClient gitHubRestClient;
     private final OpenAIClient openAIClient;
     private final ObjectMapper objectMapper;
-
-    @Value("${github.token}")
-    private String githubToken;
+    private final GitHubCredentialProvider credentialProvider;
 
     @Value("${llm.chat-deployment:gpt-4o}")
     private String deployment;
@@ -77,7 +76,7 @@ public class ReviewHistoryTool {
         String prsJson = gitHubRestClient.get()
                 .uri("/repos/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page={n}",
                         repoFullName, historyPrCount)
-                .header("Authorization", "Bearer " + githubToken)
+                .header("Authorization", "Bearer " + credentialProvider.token())
                 .header("Accept", "application/vnd.github.v3+json")
                 .retrieve()
                 .body(String.class);
@@ -131,7 +130,7 @@ public class ReviewHistoryTool {
     private List<String> fetchReviewComments(String repoFullName, int prNumber) throws Exception {
         String commentsJson = gitHubRestClient.get()
                 .uri("/repos/{repo}/pulls/{pr}/comments?per_page=50", repoFullName, prNumber)
-                .header("Authorization", "Bearer " + githubToken)
+                .header("Authorization", "Bearer " + credentialProvider.token())
                 .header("Accept", "application/vnd.github.v3+json")
                 .retrieve()
                 .body(String.class);

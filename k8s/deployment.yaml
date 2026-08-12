@@ -44,11 +44,23 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: "prod"
-            - name: GITHUB_TOKEN
+            - name: GITHUB_AUTH_MODE
+              value: "app"
+            - name: GITHUB_APP_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: pr-review-agent-config
+                  key: github-app-id
+            - name: GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: pr-review-agent-config
+                  key: github-app-installation-id
+            - name: GITHUB_APP_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
                   name: pr-review-agent-secrets
-                  key: github-token
+                  key: github-app-private-key
             - name: GITHUB_MODELS_TOKEN
               valueFrom:
                 secretKeyRef:

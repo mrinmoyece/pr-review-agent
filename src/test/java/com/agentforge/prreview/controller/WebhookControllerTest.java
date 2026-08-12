@@ -21,7 +21,9 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class WebhookControllerTest {
@@ -58,6 +60,29 @@ class WebhookControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         verify(reviewAgent).review(REPOSITORY, 42, "feature", "Improve checks", "Details");
+    }
+
+    @Test
+    void invalidSignatureIsRejectedBeforeReplayReservationOrReview() {
+        String payload = payload(REPOSITORY);
+
+        var response = controller.handleGitHubWebhook(
+                "pull_request", "sha256=" + "0".repeat(64), "delivery-invalid", payload);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verifyNoInteractions(deliveryStore, reviewAgent);
+    }
+
+    @Test
+    void payloadChangedAfterSigningIsRejected() throws Exception {
+        String original = payload(REPOSITORY);
+        String modified = original.replace("Improve checks", "Injected title");
+
+        var response = controller.handleGitHubWebhook(
+                "pull_request", signature(original), "delivery-modified", modified);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verifyNoInteractions(deliveryStore, reviewAgent);
     }
 
     @Test
@@ -115,6 +140,44 @@ class WebhookControllerTest {
         var response = controller.manualTrigger("", REPOSITORY, 42);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void enabledManualTriggerRejectsInvalidToken() {
+        enableManualTrigger();
+
+        var response = controller.manualTrigger("wrong-token", REPOSITORY, 42);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verify(reviewAgent, never()).review(anyString(), anyInt(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void enabledManualTriggerAcceptsValidTokenForAllowedRepository() {
+        String token = enableManualTrigger();
+
+        var response = controller.manualTrigger(token, REPOSITORY, 42);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        verify(reviewAgent).review(REPOSITORY, 42, "", "", "");
+    }
+
+    @Test
+    void enabledManualTriggerEnforcesRepositoryAllowlist() {
+        String token = enableManualTrigger();
+
+        var response = controller.manualTrigger(token, "attacker/repo", 42);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(reviewAgent, never()).review(anyString(), anyInt(), anyString(), anyString(), anyString());
+    }
+
+    private String enableManualTrigger() {
+        String token = "manual-trigger-value".repeat(2);
+        ReflectionTestUtils.setField(controller, "manualTriggerEnabled", true);
+        ReflectionTestUtils.setField(controller, "manualTriggerToken", token);
+        controller.validateConfiguration();
+        return token;
     }
 
     private String payload(String repository) {

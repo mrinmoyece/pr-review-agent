@@ -5,9 +5,11 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions: {}
@@ -145,10 +147,40 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+      - uses: github/codeql-action/init@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3
+        with:
+          languages: java
+          queries: security-extended
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Build
+        run: ./gradlew compileJava compileTestJava --no-daemon
+      - uses: github/codeql-action/analyze@c4dd10e44af883a891fe31ced449bcb4a6728b9b # v3
+        with:
+          category: /language:java
+
   publish:
     name: Publish Immutable Image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [build-and-test, secrets-scan, dependency-scan, container-scan]
+    needs: [build-and-test, secrets-scan, dependency-scan, container-scan, codeql]
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 20

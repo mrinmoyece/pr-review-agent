@@ -5,10 +5,10 @@ import com.agentforge.prreview.model.ReviewComment;
 import com.agentforge.prreview.model.ReviewResult;
 import com.agentforge.prreview.model.ReviewRoundResult;
 import com.agentforge.prreview.model.TicketAlignment;
+import com.agentforge.prreview.security.GitHubCredentialProvider;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -28,9 +28,7 @@ import java.util.Map;
 public class GitHubCommentTool {
 
     private final RestClient gitHubRestClient;
-
-    @Value("${github.token}")
-    private String githubToken;
+    private final GitHubCredentialProvider credentialProvider;
 
     @CircuitBreaker(name = "github", fallbackMethod = "postReviewFallback")
     public void postReview(String repoFullName, int prNumber, ReviewResult result) {
@@ -51,7 +49,7 @@ public class GitHubCommentTool {
 
         gitHubRestClient.post()
                 .uri("/repos/{repo}/pulls/{pr}/reviews", repoFullName, prNumber)
-                .header("Authorization", "Bearer " + githubToken)
+                .header("Authorization", "Bearer " + credentialProvider.token())
                 .header("Accept", "application/vnd.github.v3+json")
                 .body(body)
                 .retrieve()

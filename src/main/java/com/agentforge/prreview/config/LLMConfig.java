@@ -40,9 +40,6 @@ public class LLMConfig {
     @Value("${github.models.endpoint:https://models.inference.ai.azure.com}")
     private String githubModelsEndpoint;
 
-    @Value("${github.token:}")
-    private String githubToken;
-
     @Value("${github.models.token:}")
     private String githubModelsToken;
 

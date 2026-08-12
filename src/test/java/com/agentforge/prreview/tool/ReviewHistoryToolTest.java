@@ -2,6 +2,7 @@ package com.agentforge.prreview.tool;
 
 import com.azure.ai.openai.OpenAIClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.agentforge.prreview.security.GitHubCredentialProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
@@ -20,7 +21,8 @@ class ReviewHistoryToolTest {
         tool = new ReviewHistoryTool(
                 mockGitHubClient,
                 mock(OpenAIClient.class),
-                new ObjectMapper()
+                new ObjectMapper(),
+                mock(GitHubCredentialProvider.class)
         );
     }
 

@@ -11,6 +11,10 @@ Use a GitHub App, not a personal access token. Install it only on approved
 repositories and grant `Contents: read`, `Metadata: read`, and
 `Pull requests: write`. Keep `Contents: write` disabled; the agent does not write
 repository content.
+Set `GITHUB_AUTH_MODE=app`, `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and
+`GITHUB_APP_PRIVATE_KEY` (GitHub PKCS#1 or PKCS#8 RSA PEM). The runtime signs a short-lived app JWT,
+mints an installation token, and refreshes it five minutes before expiry. Static
+`GITHUB_TOKEN` mode is intended only for local development.
 Use a separate inference-only credential for `GITHUB_MODELS_TOKEN`.
 
 Set a random webhook secret of at least 32 bytes and configure
@@ -69,6 +73,7 @@ produces a non-approval result and must not satisfy a merge gate.
 | Setting | Source | Production owner |
 |---|---|---|
 | GitHub App permissions and installation | GitHub organization/repository | Repository administrators |
+| GitHub API authentication | `GITHUB_AUTH_MODE`, `GITHUB_APP_*` | Application/platform owners |
 | Repository allowlist | `GITHUB_REPOSITORY_ALLOWLIST` | Application owner |
 | Webhook secret | `GITHUB_WEBHOOK_SECRET` | Security/platform secret store |
 | Model provider and credential | `LLM_PROVIDER`, provider variables | AI platform owner |

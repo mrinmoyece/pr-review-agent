@@ -2,11 +2,11 @@ package com.agentforge.prreview.tool;
 
 import com.agentforge.prreview.model.DiffFile;
 import com.agentforge.prreview.exception.ReviewAgentException;
+import com.agentforge.prreview.security.GitHubCredentialProvider;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -23,9 +23,7 @@ import java.util.List;
 public class GitHubDiffTool {
 
     private final RestClient gitHubRestClient;
-
-    @Value("${github.token}")
-    private String githubToken;
+    private final GitHubCredentialProvider credentialProvider;
 
     @Retry(name = "github-read")
     @CircuitBreaker(name = "github", fallbackMethod = "fetchDiffFallback")
@@ -33,7 +31,7 @@ public class GitHubDiffTool {
         log.info("Fetching diff for {}/#{}", repoFullName, prNumber);
         return gitHubRestClient.get()
                 .uri("/repos/{repo}/pulls/{pr}", repoFullName, prNumber)
-                .header("Authorization", "Bearer " + githubToken)
+                .header("Authorization", "Bearer " + credentialProvider.token())
                 .header("Accept", "application/vnd.github.diff")
                 .retrieve()
                 .body(String.class);
