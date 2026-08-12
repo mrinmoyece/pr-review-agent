@@ -46,7 +46,7 @@ class WebhookControllerTest {
         ReflectionTestUtils.setField(controller, "manualTriggerEnabled", false);
         ReflectionTestUtils.setField(controller, "manualTriggerToken", "");
         controller.validateConfiguration();
-        when(reviewAgent.review(anyString(), anyInt(), anyString(), anyString(), anyString()))
+        when(reviewAgent.review(anyString(), anyInt(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(mock(ReviewResult.class)));
         when(deliveryStore.recordIfNew(anyString(), anyString())).thenReturn(true);
     }
@@ -59,7 +59,7 @@ class WebhookControllerTest {
                 "pull_request", signature(payload), "delivery-1", payload);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
-        verify(reviewAgent).review(REPOSITORY, 42, "feature", "Improve checks", "Details");
+        verify(reviewAgent).review(REPOSITORY, 42, "feature", "abc123def456abc123def456abc123def456abc1", "Improve checks", "Details");
     }
 
     @Test
@@ -112,7 +112,7 @@ class WebhookControllerTest {
     @Test
     void failedReviewReleasesDeliveryForRedelivery() throws Exception {
         CompletableFuture<ReviewResult> failure = new CompletableFuture<>();
-        when(reviewAgent.review(anyString(), anyInt(), anyString(), anyString(), anyString()))
+        when(reviewAgent.review(anyString(), anyInt(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(failure);
         String payload = payload(REPOSITORY);
 
@@ -132,7 +132,7 @@ class WebhookControllerTest {
         controller.handleGitHubWebhook(
                 "pull_request", signature(payload), "delivery-deleted-fork", payload);
 
-        verify(reviewAgent).review(REPOSITORY, 42, "", "Improve checks", "Details");
+        verify(reviewAgent).review(REPOSITORY, 42, "", "abc123def456abc123def456abc123def456abc1", "Improve checks", "Details");
     }
 
     @Test
@@ -149,7 +149,7 @@ class WebhookControllerTest {
         var response = controller.manualTrigger("wrong-token", REPOSITORY, 42);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        verify(reviewAgent, never()).review(anyString(), anyInt(), anyString(), anyString(), anyString());
+        verify(reviewAgent, never()).review(anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -159,7 +159,7 @@ class WebhookControllerTest {
         var response = controller.manualTrigger(token, REPOSITORY, 42);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
-        verify(reviewAgent).review(REPOSITORY, 42, "", "", "");
+        verify(reviewAgent).review(REPOSITORY, 42, "", "", "", "");
     }
 
     @Test
@@ -169,7 +169,7 @@ class WebhookControllerTest {
         var response = controller.manualTrigger(token, "attacker/repo", 42);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        verify(reviewAgent, never()).review(anyString(), anyInt(), anyString(), anyString(), anyString());
+        verify(reviewAgent, never()).review(anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
     }
 
     private String enableManualTrigger() {
@@ -191,6 +191,7 @@ class WebhookControllerTest {
                     "body": "Details",
                     "head": {
                       "ref": "feature",
+                      "sha": "abc123def456abc123def456abc123def456abc1",
                       "repo": {"full_name": "%s"}
                     }
                   }

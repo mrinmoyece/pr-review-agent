@@ -27,8 +27,8 @@ public class GitHubDiffTool {
 
     @Retry(name = "github-read")
     @CircuitBreaker(name = "github", fallbackMethod = "fetchDiffFallback")
-    public String fetchDiff(String repoFullName, int prNumber) {
-        log.info("Fetching diff for {}/#{}", repoFullName, prNumber);
+    public String fetchDiff(String repoFullName, int prNumber, String headSha) {
+        log.info("Fetching diff for {}/#{} (expected head {})", repoFullName, prNumber, headSha);
         return gitHubRestClient.get()
                 .uri("/repos/{repo}/pulls/{pr}", repoFullName, prNumber)
                 .header("Authorization", "Bearer " + credentialProvider.token())
@@ -37,9 +37,42 @@ public class GitHubDiffTool {
                 .body(String.class);
     }
 
-    public String fetchDiffFallback(String repoFullName, int prNumber, Throwable t) {
+    /**
+     * Returns the current head SHA of the pull request from GitHub.
+     * Used to detect whether the PR has been updated since the webhook was received.
+     */
+    @Retry(name = "github-read")
+    @CircuitBreaker(name = "github", fallbackMethod = "fetchHeadShaFallback")
+    public String fetchCurrentHeadSha(String repoFullName, int prNumber) {
+        String json = gitHubRestClient.get()
+                .uri("/repos/{repo}/pulls/{pr}", repoFullName, prNumber)
+                .header("Authorization", "Bearer " + credentialProvider.token())
+                .header("Accept", "application/vnd.github+json")
+                .retrieve()
+                .body(String.class);
+        try {
+            com.fasterxml.jackson.databind.JsonNode node =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+            String sha = node.path("head").path("sha").asText(null);
+            if (sha == null || sha.isBlank()) {
+                throw new ReviewAgentException("GitHub PR response missing head.sha");
+            }
+            return sha;
+        } catch (ReviewAgentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ReviewAgentException("Could not parse head.sha from PR response", e);
+        }
+    }
+
+    public String fetchDiffFallback(String repoFullName, int prNumber, String headSha, Throwable t) {
         throw new ReviewAgentException(
                 "GitHub API unavailable for " + repoFullName + "/#" + prNumber, t);
+    }
+
+    public String fetchHeadShaFallback(String repoFullName, int prNumber, Throwable t) {
+        throw new ReviewAgentException(
+                "GitHub API unavailable (head SHA check) for " + repoFullName + "/#" + prNumber, t);
     }
 
     /**

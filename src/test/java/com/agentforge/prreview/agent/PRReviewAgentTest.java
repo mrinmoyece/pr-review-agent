@@ -58,7 +58,8 @@ class PRReviewAgentTest {
                 .filename("src/main/java/Foo.java")
                 .rawDiff("@@ -1 +1 @@\n+changed\n")
                 .build();
-        when(diffTool.fetchDiff(REPOSITORY, 42)).thenReturn("diff");
+        when(diffTool.fetchDiff(REPOSITORY, 42, "abc123")).thenReturn("diff");
+        when(diffTool.fetchCurrentHeadSha(REPOSITORY, 42)).thenReturn("abc123");
         when(diffTool.parseDiff("diff")).thenReturn(List.of(file));
         when(securityTool.scan(any())).thenReturn(List.of());
         when(architectureTool.check(any())).thenReturn(List.of());
@@ -139,7 +140,7 @@ class PRReviewAgentTest {
     }
 
     private ReviewResult review() {
-        return agent.review(REPOSITORY, 42, "feature", "title", "body").join();
+        return agent.review(REPOSITORY, 42, "feature", "abc123", "title", "body").join();
     }
 
     private ReviewRoundResult round(ReviewPass pass,

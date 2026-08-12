@@ -89,14 +89,15 @@ public class PRReviewAgent {
 
     @Async("reviewExecutor")
     public CompletableFuture<ReviewResult> review(String repoFullName, int prNumber,
-                                                   String headBranch, String prTitle, String prBody) {
+                                                   String headBranch, String headSha,
+                                                   String prTitle, String prBody) {
         String safeRepoFullName = sanitizeForLog(repoFullName);
-        log.info("Starting PR review - {}/#{}", safeRepoFullName, prNumber);
+        log.info("Starting PR review - {}/#{} at {}", safeRepoFullName, prNumber, headSha);
         try {
             if (!allowedRepositories().contains(repoFullName)) {
                 throw new ReviewAgentException("Repository is not in the configured allowlist");
             }
-            String diff = gitHubDiffTool.fetchDiff(repoFullName, prNumber);
+            String diff = gitHubDiffTool.fetchDiff(repoFullName, prNumber, headSha);
             if (diff == null || diff.isBlank()) {
                 throw new ReviewAgentException("GitHub returned an empty diff; refusing to approve");
             }
@@ -171,7 +172,20 @@ public class PRReviewAgent {
                     .reviewedAt(Instant.now())
                     .build();
 
-            gitHubCommentTool.postReview(repoFullName, prNumber, result);
+            // Before publishing, verify the PR head has not moved since the webhook
+            // was received. An approval against a stale diff would be recorded on the
+            // current head if commit_id is absent, silently approving unseen changes.
+            if (headSha != null && !headSha.isBlank()) {
+                String currentSha = gitHubDiffTool.fetchCurrentHeadSha(repoFullName, prNumber);
+                if (!headSha.equals(currentSha)) {
+                    log.warn("PR head moved since webhook for {}/#{}: reviewed={} current={}",
+                            safeRepoFullName, prNumber, headSha, currentSha);
+                    throw new ReviewAgentException(
+                            "PR head changed since review started; aborting to avoid stale verdict");
+                }
+            }
+
+            gitHubCommentTool.postReview(repoFullName, prNumber, headSha, result);
             log.info("Review posted - verdict={} score={} complete={}", verdict, score, reviewComplete);
             return CompletableFuture.completedFuture(result);
         } catch (Exception e) {

@@ -56,6 +56,14 @@ class SecurityScanToolTest {
         assertThat(comments).anyMatch(c ->
                 c.getTitle().toLowerCase().contains("secret") ||
                 c.getTitle().toLowerCase().contains("credential"));
+        // Secret value must be redacted in the comment body posted to GitHub
+        comments.stream()
+                .filter(c -> c.getTitle().toLowerCase().contains("secret") ||
+                        c.getTitle().toLowerCase().contains("credential"))
+                .forEach(c -> assertThat(c.getBody())
+                        .as("Comment body must not expose the literal credential value")
+                        .doesNotContain("secret123")
+                        .contains("[REDACTED]"));
     }
 
     @Test

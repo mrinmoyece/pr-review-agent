@@ -137,13 +137,23 @@ public class SecurityScanTool {
         return result;
     }
 
+    // Regex that captures the variable name and the assignment operator so the
+    // secret value itself can be replaced with a placeholder before publishing.
+    private static final java.util.regex.Pattern SECRET_VALUE =
+            java.util.regex.Pattern.compile(
+                    "(\\b[A-Za-z_$][A-Za-z0-9_$]*\\s*=\\s*)\"[^\"]{6,}\"",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+
     private String formatComment(SecurityRule rule, String code) {
+        String displayCode = rule.pattern() == HARDCODED_SECRET
+                ? SECRET_VALUE.matcher(code.trim()).replaceAll("$1\"[REDACTED]\"")
+                : code.trim();
         return """
                 🔒 **Security Issue** — %s
 
                 **Reference:** %s
 
                 **Detected in:** `%s`
-                """.formatted(rule.description(), rule.owaspRef(), code.trim());
+                """.formatted(rule.description(), rule.owaspRef(), displayCode);
     }
 }

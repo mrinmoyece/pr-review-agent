@@ -135,6 +135,7 @@ public class WebhookController {
         }
 
         String headBranch = textOrNull(root.path("pull_request").path("head"), "ref");
+        String headSha = textOrNull(root.path("pull_request").path("head"), "sha");
         String headRepository = textOrNull(
                 root.path("pull_request").path("head").path("repo"), "full_name");
         String prTitle = textOrNull(root.path("pull_request"), "title");
@@ -157,6 +158,7 @@ public class WebhookController {
         try {
             CompletableFuture<ReviewResult> future = prReviewAgent.review(repo, prNumber,
                     sameRepositoryPullRequest && headBranch != null ? headBranch : "",
+                    headSha != null ? headSha : "",
                     prTitle != null ? prTitle : "",
                     prBody != null ? prBody : "");
             future.whenComplete((result, failure) -> {
@@ -191,7 +193,7 @@ public class WebhookController {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid repository or PR"));
         }
         log.info("Manual review trigger for {}/#{}", repo, pr);
-        prReviewAgent.review(repo, pr, "", "", "");
+        prReviewAgent.review(repo, pr, "", "", "", "");
         return ResponseEntity.accepted()
                 .body(Map.of("status", "review_triggered", "repo", repo, "pr", String.valueOf(pr)));
     }

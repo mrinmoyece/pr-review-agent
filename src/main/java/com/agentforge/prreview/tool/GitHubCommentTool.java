@@ -31,7 +31,7 @@ public class GitHubCommentTool {
     private final GitHubCredentialProvider credentialProvider;
 
     @CircuitBreaker(name = "github", fallbackMethod = "postReviewFallback")
-    public void postReview(String repoFullName, int prNumber, ReviewResult result) {
+    public void postReview(String repoFullName, int prNumber, String headSha, ReviewResult result) {
         log.info("Posting review to {}/#{} — verdict={} comments={}",
                 repoFullName, prNumber, result.getVerdict(), result.getComments().size());
 
@@ -46,6 +46,12 @@ public class GitHubCommentTool {
         body.put("body", buildReviewBody(result));
         body.put("event", event);
         body.put("comments", buildInlineComments(result.getComments()));
+        // Pin the review to the commit that was reviewed. If the PR head has moved
+        // since the webhook was received, the review is correctly recorded against the
+        // reviewed commit and GitHub marks it as outdated rather than approving the new head.
+        if (headSha != null && !headSha.isBlank()) {
+            body.put("commit_id", headSha);
+        }
 
         gitHubRestClient.post()
                 .uri("/repos/{repo}/pulls/{pr}/reviews", repoFullName, prNumber)
@@ -58,7 +64,7 @@ public class GitHubCommentTool {
         log.info("Review posted successfully to {}/#{}", repoFullName, prNumber);
     }
 
-    public void postReviewFallback(String repoFullName, int prNumber,
+    public void postReviewFallback(String repoFullName, int prNumber, String headSha,
                                    ReviewResult result, Throwable t) {
         throw new IllegalStateException(
                 "Failed to post review to GitHub " + repoFullName + "/#" + prNumber, t);
