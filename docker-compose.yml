@@ -27,7 +27,12 @@ services:
       retries: 5
   redis:
     image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # Enable AOF persistence so replay keys survive container restarts.
+    # Without persistence a restarted Redis loses all retained delivery IDs,
+    # allowing a captured signed payload to be replayed within the retention window.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -45,3 +50,6 @@ services:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?required}
+
+volumes:
+  redis-data:

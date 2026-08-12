@@ -97,7 +97,12 @@ public class PRReviewAgent {
             if (!allowedRepositories().contains(repoFullName)) {
                 throw new ReviewAgentException("Repository is not in the configured allowlist");
             }
-            String diff = gitHubDiffTool.fetchDiff(repoFullName, prNumber, headSha);
+            // Always resolve a concrete head SHA so the staleness guard and commit_id
+            // pinning work for every code path, including the manual trigger.
+            String pinnedSha = (headSha != null && !headSha.isBlank())
+                    ? headSha
+                    : gitHubDiffTool.fetchCurrentHeadSha(repoFullName, prNumber);
+            String diff = gitHubDiffTool.fetchDiff(repoFullName, prNumber, pinnedSha);
             if (diff == null || diff.isBlank()) {
                 throw new ReviewAgentException("GitHub returned an empty diff; refusing to approve");
             }
@@ -172,20 +177,18 @@ public class PRReviewAgent {
                     .reviewedAt(Instant.now())
                     .build();
 
-            // Before publishing, verify the PR head has not moved since the webhook
-            // was received. An approval against a stale diff would be recorded on the
-            // current head if commit_id is absent, silently approving unseen changes.
-            if (headSha != null && !headSha.isBlank()) {
-                String currentSha = gitHubDiffTool.fetchCurrentHeadSha(repoFullName, prNumber);
-                if (!headSha.equals(currentSha)) {
-                    log.warn("PR head moved since webhook for {}/#{}: reviewed={} current={}",
-                            safeRepoFullName, prNumber, headSha, currentSha);
-                    throw new ReviewAgentException(
-                            "PR head changed since review started; aborting to avoid stale verdict");
-                }
+            // Before publishing, verify the PR head has not moved since the review started.
+            // pinnedSha is always set (either from the webhook or fetched above), so this
+            // guard runs for every code path including the manual trigger.
+            String currentSha = gitHubDiffTool.fetchCurrentHeadSha(repoFullName, prNumber);
+            if (!pinnedSha.equals(currentSha)) {
+                log.warn("PR head moved during review for {}/#{}: reviewed={} current={}",
+                        safeRepoFullName, prNumber, pinnedSha, currentSha);
+                throw new ReviewAgentException(
+                        "PR head changed since review started; aborting to avoid stale verdict");
             }
 
-            gitHubCommentTool.postReview(repoFullName, prNumber, headSha, result);
+            gitHubCommentTool.postReview(repoFullName, prNumber, pinnedSha, result);
             log.info("Review posted - verdict={} score={} complete={}", verdict, score, reviewComplete);
             return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
