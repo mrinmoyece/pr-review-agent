@@ -16,31 +16,88 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/actuator/prometheus"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "9090"
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: pr-review-agent
-          image: your-registry/pr-review-agent:latest
+          # Deployment automation must replace this fail-closed sentinel with the
+          # immutable digest produced by the release workflow.
+          image: ghcr.io/mrinmoyece/pr-review-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
+              name: http
+            - containerPort: 9090
+              name: management
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: "prod"
-            - name: GITHUB_TOKEN
+            - name: GITHUB_AUTH_MODE
+              value: "app"
+            - name: GITHUB_APP_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: pr-review-agent-config
+                  key: github-app-id
+            - name: GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: pr-review-agent-config
+                  key: github-app-installation-id
+            - name: GITHUB_APP_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
                   name: pr-review-agent-secrets
-                  key: github-token
+                  key: github-app-private-key
+            - name: GITHUB_MODELS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pr-review-agent-secrets
+                  key: github-models-token
+            - name: GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pr-review-agent-secrets
+                  key: webhook-secret
+            - name: GITHUB_REPOSITORY_ALLOWLIST
+              valueFrom:
+                configMapKeyRef:
+                  name: pr-review-agent-config
+                  key: repository-allowlist
+            - name: REVIEW_AUTO_FIX_ENABLED
+              value: "false"
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: pr-review-agent-config
+                  key: redis-host
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pr-review-agent-secrets
+                  key: redis-password
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: 8080
+              port: management
             initialDelaySeconds: 20
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: 8080
+              port: management
             initialDelaySeconds: 30
             periodSeconds: 30
           resources:
@@ -50,9 +107,13 @@ spec:
             limits:
               memory: "1Gi"
               cpu: "1000m"
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
+          volumeMounts:
+            - name: temporary-files
+              mountPath: /tmp
+      volumes:
+        - name: temporary-files
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service
@@ -65,3 +126,72 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8080
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pr-review-agent
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: pr-review-agent
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pr-review-agent
+spec:
+  podSelector:
+    matchLabels:
+      app: pr-review-agent
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Deployment automation must replace this fail-closed documentation-range
+    # address with approved API CIDRs, or install an equivalent FQDN policy.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.1/32
+      ports:
+        - protocol: TCP
+          port: 443

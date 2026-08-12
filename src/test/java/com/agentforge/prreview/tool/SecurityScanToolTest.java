@@ -4,8 +4,6 @@ import com.agentforge.prreview.model.DiffFile;
 import com.agentforge.prreview.model.ReviewComment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 
@@ -21,12 +19,16 @@ class SecurityScanToolTest {
     }
 
     private DiffFile javaFile(String filename, List<String> addedLines) {
+        String rawDiff = "diff --git a/%s b/%s\n--- a/%s\n+++ b/%s\n@@ -0,0 +1,%d @@\n%s\n"
+                .formatted(filename, filename, filename, filename, addedLines.size(),
+                        addedLines.stream().map(line -> "+" + line)
+                                .reduce("", (left, right) -> left + right + "\n"));
         return DiffFile.builder()
                 .filename(filename)
                 .language("java")
                 .addedLines(addedLines)
                 .removedLines(List.of())
-                .rawDiff("")
+                .rawDiff(rawDiff)
                 .build();
     }
 
@@ -54,6 +56,26 @@ class SecurityScanToolTest {
         assertThat(comments).anyMatch(c ->
                 c.getTitle().toLowerCase().contains("secret") ||
                 c.getTitle().toLowerCase().contains("credential"));
+        // Secret value must be redacted in the comment body posted to GitHub
+        comments.stream()
+                .filter(c -> c.getTitle().toLowerCase().contains("secret") ||
+                        c.getTitle().toLowerCase().contains("credential"))
+                .forEach(c -> assertThat(c.getBody())
+                        .as("Comment body must not expose the literal credential value")
+                        .doesNotContain("secret123")
+                        .contains("[REDACTED]"));
+    }
+
+    @Test
+    void ordinaryIdentifiersContainingCredentialPrefixesAreNotSecrets() {
+        DiffFile file = javaFile("Tokenizer.java",
+                List.of("String tokenizer = \"wordpiece\";",
+                        "String passwordPolicy = \"minimum-length\";"));
+
+        List<ReviewComment> comments = securityScanTool.scan(List.of(file));
+
+        assertThat(comments).noneMatch(c ->
+                c.getTitle().toLowerCase().contains("secret"));
     }
 
     @Test

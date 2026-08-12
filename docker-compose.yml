@@ -1,29 +1,55 @@
-version: "3.9"
 services:
   app:
     build: .
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      GITHUB_AUTH_MODE: ${GITHUB_AUTH_MODE:-token}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
-      LLM_PROVIDER: ${LLM_PROVIDER:-github-models}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_MODELS_TOKEN: ${GITHUB_MODELS_TOKEN:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?required}
+      GITHUB_REPOSITORY_ALLOWLIST: ${GITHUB_REPOSITORY_ALLOWLIST:?required}
+      LLM_PROVIDER: ${LLM_PROVIDER:-github_models}
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9090/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 5
+  redis:
+    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    # Enable AOF persistence so replay keys survive container restarts.
+    # Without persistence a restarted Redis loses all retained delivery IDs,
+    # allowing a captured signed payload to be replayed within the retention window.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
   prometheus:
-    image: prom/prometheus:v2.51.0
+    image: prom/prometheus:v2.51.0@sha256:5ccad477d0057e62a7cd1981ffcc43785ac10c5a35522dc207466ff7e7ec845f
     ports:
       - "9090:9090"
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
   grafana:
-    image: grafana/grafana:10.4.0
+    image: grafana/grafana:10.4.0@sha256:f9811e4e687ffecf1a43adb9b64096c50bc0d7a782f8608530f478b6542de7d5
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?required}
+
+volumes:
+  redis-data:

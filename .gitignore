@@ -7,7 +7,6 @@ target/
 # Gradle
 .gradle/
 gradle-app.setting
-!gradle/wrapper/gradle-wrapper.jar
 
 # IDE
 .idea/
@@ -36,4 +35,5 @@ logs/
 # Dependency scan reports (generated, not source)
 dependency-check-data/
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 bin/

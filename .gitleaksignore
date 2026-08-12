@@ -1,0 +1,6 @@
+# Synthetic webhook test fixture from the original feature commit.
+84404a159882db063a94c0cafb83c834f658bf2b:src/test/java/com/agentforge/prreview/controller/WebhookControllerTest.java:generic-api-key:27
+
+# PEM boundary literals used by the credential parser and generated-key tests; no key material was committed.
+9d991ff41edd0ba3f4fdef3c65e65915b2164d46:src/main/java/com/agentforge/prreview/security/GitHubCredentialProvider.java:private-key:134
+9d991ff41edd0ba3f4fdef3c65e65915b2164d46:src/test/java/com/agentforge/prreview/security/GitHubCredentialProviderTest.java:private-key:76

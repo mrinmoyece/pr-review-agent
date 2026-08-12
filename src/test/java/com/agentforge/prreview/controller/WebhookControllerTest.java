@@ -1,0 +1,213 @@
+package com.agentforge.prreview.controller;
+
+import com.agentforge.prreview.agent.PRReviewAgent;
+import com.agentforge.prreview.model.ReviewResult;
+import com.agentforge.prreview.security.WebhookDeliveryStore;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.concurrent.CompletableFuture;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+class WebhookControllerTest {
+
+    private static final String SECRET = "webhook-test-value".repeat(3);
+    private static final String REPOSITORY = "org/repo";
+
+    private PRReviewAgent reviewAgent;
+    private WebhookDeliveryStore deliveryStore;
+    private WebhookController controller;
+
+    @BeforeEach
+    void setUp() {
+        reviewAgent = mock(PRReviewAgent.class);
+        deliveryStore = mock(WebhookDeliveryStore.class);
+        controller = new WebhookController(reviewAgent, new ObjectMapper(), deliveryStore);
+        ReflectionTestUtils.setField(controller, "webhookSecret", SECRET);
+        ReflectionTestUtils.setField(controller, "repositoryAllowlist", REPOSITORY);
+        ReflectionTestUtils.setField(controller, "maxPayloadBytes", 1_000_000);
+        ReflectionTestUtils.setField(controller, "manualTriggerEnabled", false);
+        ReflectionTestUtils.setField(controller, "manualTriggerToken", "");
+        controller.validateConfiguration();
+        when(reviewAgent.review(anyString(), anyInt(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(mock(ReviewResult.class)));
+        when(deliveryStore.recordIfNew(anyString(), anyString())).thenReturn(true);
+    }
+
+    @Test
+    void validWebhookForAllowedRepositoryTriggersReview() throws Exception {
+        String payload = payload(REPOSITORY);
+
+        var response = controller.handleGitHubWebhook(
+                "pull_request", signature(payload), "delivery-1", payload);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        verify(reviewAgent).review(REPOSITORY, 42, "feature", "abc123def456abc123def456abc123def456abc1", "Improve checks", "Details");
+    }
+
+    @Test
+    void invalidSignatureIsRejectedBeforeReplayReservationOrReview() {
+        String payload = payload(REPOSITORY);
+
+        var response = controller.handleGitHubWebhook(
+                "pull_request", "sha256=" + "0".repeat(64), "delivery-invalid", payload);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verifyNoInteractions(deliveryStore, reviewAgent);
+    }
+
+    @Test
+    void payloadChangedAfterSigningIsRejected() throws Exception {
+        String original = payload(REPOSITORY);
+        String modified = original.replace("Improve checks", "Injected title");
+
+        var response = controller.handleGitHubWebhook(
+                "pull_request", signature(original), "delivery-modified", modified);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verifyNoInteractions(deliveryStore, reviewAgent);
+    }
+
+    @Test
+    void duplicateDeliveryIsRejected() throws Exception {
+        String payload = payload(REPOSITORY);
+        String signature = signature(payload);
+        String replayKey = replayKey(payload);
+
+        controller.handleGitHubWebhook("pull_request", signature, "delivery-2", payload);
+        when(deliveryStore.recordIfNew(eq(replayKey), anyString())).thenReturn(false);
+        var duplicate = controller.handleGitHubWebhook(
+                "pull_request", signature, "fresh-delivery-id", payload);
+
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void repositoryOutsideAllowlistIsRejected() throws Exception {
+        String payload = payload("attacker/repo");
+
+        var response = controller.handleGitHubWebhook(
+                "pull_request", signature(payload), "delivery-3", payload);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void failedReviewReleasesDeliveryForRedelivery() throws Exception {
+        CompletableFuture<ReviewResult> failure = new CompletableFuture<>();
+        when(reviewAgent.review(anyString(), anyInt(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(failure);
+        String payload = payload(REPOSITORY);
+
+        controller.handleGitHubWebhook(
+                "pull_request", signature(payload), "delivery-failed", payload);
+        failure.completeExceptionally(new IllegalStateException("provider unavailable"));
+
+        verify(deliveryStore).release(eq(replayKey(payload)), anyString());
+    }
+
+    @Test
+    void missingHeadRepositoryDisablesAutoFixBranch() throws Exception {
+        String payload = payload(REPOSITORY).replace(
+                "\"repo\": {\"full_name\": \"%s\"}".formatted(REPOSITORY),
+                "\"repo\": null");
+
+        controller.handleGitHubWebhook(
+                "pull_request", signature(payload), "delivery-deleted-fork", payload);
+
+        verify(reviewAgent).review(REPOSITORY, 42, "", "abc123def456abc123def456abc123def456abc1", "Improve checks", "Details");
+    }
+
+    @Test
+    void manualTriggerIsNotExposedByDefault() {
+        var response = controller.manualTrigger("", REPOSITORY, 42);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void enabledManualTriggerRejectsInvalidToken() {
+        enableManualTrigger();
+
+        var response = controller.manualTrigger("wrong-token", REPOSITORY, 42);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verify(reviewAgent, never()).review(anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void enabledManualTriggerAcceptsValidTokenForAllowedRepository() {
+        String token = enableManualTrigger();
+
+        var response = controller.manualTrigger(token, REPOSITORY, 42);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        verify(reviewAgent).review(REPOSITORY, 42, "", "", "", "");
+    }
+
+    @Test
+    void enabledManualTriggerEnforcesRepositoryAllowlist() {
+        String token = enableManualTrigger();
+
+        var response = controller.manualTrigger(token, "attacker/repo", 42);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(reviewAgent, never()).review(anyString(), anyInt(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    private String enableManualTrigger() {
+        String token = "manual-trigger-value".repeat(2);
+        ReflectionTestUtils.setField(controller, "manualTriggerEnabled", true);
+        ReflectionTestUtils.setField(controller, "manualTriggerToken", token);
+        controller.validateConfiguration();
+        return token;
+    }
+
+    private String payload(String repository) {
+        return """
+                {
+                  "action": "opened",
+                  "repository": {"full_name": "%s"},
+                  "pull_request": {
+                    "number": 42,
+                    "title": "Improve checks",
+                    "body": "Details",
+                    "head": {
+                      "ref": "feature",
+                      "sha": "abc123def456abc123def456abc123def456abc1",
+                      "repo": {"full_name": "%s"}
+                    }
+                  }
+                }
+                """.formatted(repository, repository);
+    }
+
+    private String signature(String payload) throws Exception {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        return "sha256=" + HexFormat.of().formatHex(
+                mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private String replayKey(String payload) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(payload.getBytes(StandardCharsets.UTF_8)));
+    }
+}

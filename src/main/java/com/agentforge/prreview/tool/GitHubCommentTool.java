@@ -3,12 +3,12 @@ package com.agentforge.prreview.tool;
 import com.agentforge.prreview.model.AutoFix;
 import com.agentforge.prreview.model.ReviewComment;
 import com.agentforge.prreview.model.ReviewResult;
+import com.agentforge.prreview.model.ReviewRoundResult;
 import com.agentforge.prreview.model.TicketAlignment;
+import com.agentforge.prreview.security.GitHubCredentialProvider;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -28,13 +28,10 @@ import java.util.Map;
 public class GitHubCommentTool {
 
     private final RestClient gitHubRestClient;
+    private final GitHubCredentialProvider credentialProvider;
 
-    @Value("${github.token}")
-    private String githubToken;
-
-    @Retry(name = "github")
     @CircuitBreaker(name = "github", fallbackMethod = "postReviewFallback")
-    public void postReview(String repoFullName, int prNumber, ReviewResult result) {
+    public void postReview(String repoFullName, int prNumber, String headSha, ReviewResult result) {
         log.info("Posting review to {}/#{} — verdict={} comments={}",
                 repoFullName, prNumber, result.getVerdict(), result.getComments().size());
 
@@ -49,10 +46,16 @@ public class GitHubCommentTool {
         body.put("body", buildReviewBody(result));
         body.put("event", event);
         body.put("comments", buildInlineComments(result.getComments()));
+        // Pin the review to the commit that was reviewed. If the PR head has moved
+        // since the webhook was received, the review is correctly recorded against the
+        // reviewed commit and GitHub marks it as outdated rather than approving the new head.
+        if (headSha != null && !headSha.isBlank()) {
+            body.put("commit_id", headSha);
+        }
 
         gitHubRestClient.post()
                 .uri("/repos/{repo}/pulls/{pr}/reviews", repoFullName, prNumber)
-                .header("Authorization", "Bearer " + githubToken)
+                .header("Authorization", "Bearer " + credentialProvider.token())
                 .header("Accept", "application/vnd.github.v3+json")
                 .body(body)
                 .retrieve()
@@ -61,19 +64,36 @@ public class GitHubCommentTool {
         log.info("Review posted successfully to {}/#{}", repoFullName, prNumber);
     }
 
-    public void postReviewFallback(String repoFullName, int prNumber,
+    public void postReviewFallback(String repoFullName, int prNumber, String headSha,
                                    ReviewResult result, Throwable t) {
-        log.error("Failed to post review to GitHub {}/#{}: {} — review content logged below",
-                repoFullName, prNumber, t.getMessage());
-        log.error("Review summary: verdict={} score={} comments={}",
-                result.getVerdict(), result.getOverallScore(), result.getComments().size());
+        throw new IllegalStateException(
+                "Failed to post review to GitHub " + repoFullName + "/#" + prNumber, t);
     }
 
-    private String buildReviewBody(ReviewResult result) {
+    String buildReviewBody(ReviewResult result) {
         StringBuilder sb = new StringBuilder();
         sb.append("## AgentForge PR Review\n\n");
         sb.append("**Verdict**: ").append(result.getVerdict()).append("\n");
         sb.append("**Score**: ").append(result.getOverallScore()).append("/100\n\n");
+        if (!result.isReviewComplete()) {
+            sb.append("> [!WARNING]\n");
+            sb.append("> Review coverage is incomplete. This result must not be treated as approval.\n\n");
+        }
+
+        if (result.getReviewRounds() != null && !result.getReviewRounds().isEmpty()) {
+            sb.append("### Review Coverage\n\n");
+            sb.append("| Pass | Status | Model | Chunks | Findings | Detail |\n");
+            sb.append("|---|---|---|---:|---:|---|\n");
+            for (ReviewRoundResult round : result.getReviewRounds()) {
+                sb.append("| ").append(round.getPass())
+                        .append(" | ").append(round.getStatus())
+                        .append(" | `").append(escapeTableCell(round.getModel())).append("`")
+                        .append(" | ").append(round.getChunksReviewed())
+                        .append(" | ").append(round.getComments().size())
+                        .append(" | ").append(escapeTableCell(round.getDetail())).append(" |\n");
+            }
+            sb.append("\n");
+        }
 
         if (result.getSecuritySummary() != null) {
             ReviewResult.SecuritySummary sec = result.getSecuritySummary();
@@ -86,6 +106,19 @@ public class GitHubCommentTool {
 
         if (result.getExecutiveSummary() != null) {
             sb.append("### Executive Summary\n").append(result.getExecutiveSummary()).append("\n\n");
+        }
+
+        List<ReviewComment> generalComments = result.getComments().stream()
+                .filter(comment -> comment.getLineNumber() == null)
+                .toList();
+        if (!generalComments.isEmpty()) {
+            sb.append("### General Findings\n");
+            generalComments.forEach(comment -> sb.append("- **[")
+                    .append(comment.getSeverity()).append("] ")
+                    .append(comment.getTitle()).append("** (`")
+                    .append(comment.getFilename()).append("`): ")
+                    .append(comment.getBody()).append("\n"));
+            sb.append("\n");
         }
 
         // Ticket alignment section
@@ -112,23 +145,25 @@ public class GitHubCommentTool {
         // Auto-fixes section
         List<AutoFix> fixes = result.getAutoFixesApplied();
         if (fixes != null && !fixes.isEmpty()) {
-            long committed = fixes.stream().filter(AutoFix::isApplied).count();
-            long skipped = fixes.stream().filter(f -> !f.isApplied()).count();
-            sb.append("### Auto-Fixes Applied\n");
-            sb.append(committed).append(" fix(es) committed, ").append(skipped).append(" skipped.\n");
-            fixes.stream().filter(AutoFix::isApplied).forEach(f ->
+            sb.append("### Human-Approved Fix Candidates\n");
+            fixes.forEach(f ->
                 sb.append("- `").append(f.getFilename()).append("` — ")
-                  .append(f.getIssuesFixed()).append(" issue(s) fixed (sha: `")
-                  .append(f.getCommitSha()).append("`)\n")
-            );
-            fixes.stream().filter(f -> !f.isApplied()).forEach(f ->
-                sb.append("- `").append(f.getFilename()).append("` — skipped: ")
                   .append(f.getSkipReason()).append("\n")
             );
             sb.append("\n");
         }
 
         return sb.toString();
+    }
+
+    private String escapeTableCell(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\")
+                .replace("|", "\\|")
+                .replace("\r", " ")
+                .replace("\n", "<br>");
     }
 
     private List<Map<String, Object>> buildInlineComments(List<ReviewComment> comments) {

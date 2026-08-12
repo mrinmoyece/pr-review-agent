@@ -1,11 +1,12 @@
 package com.agentforge.prreview.tool;
 
 import com.agentforge.prreview.model.DiffFile;
+import com.agentforge.prreview.exception.ReviewAgentException;
+import com.agentforge.prreview.security.GitHubCredentialProvider;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -15,6 +16,11 @@ import java.util.List;
 /**
  * Fetches raw PR diffs from the GitHub REST API and parses them into
  * structured DiffFile objects for downstream analysis tools.
+ *
+ * <p>Diffs are always fetched via the immutable compare endpoint
+ * ({@code /repos/{repo}/compare/{base}...{head}}) using explicit SHA pairs
+ * so the content is bound to a specific commit and cannot change after fetch,
+ * eliminating TOCTOU races between diff retrieval and review publication.
  */
 @Component
 @RequiredArgsConstructor
@@ -22,25 +28,72 @@ import java.util.List;
 public class GitHubDiffTool {
 
     private final RestClient gitHubRestClient;
+    private final GitHubCredentialProvider credentialProvider;
 
-    @Value("${github.token}")
-    private String githubToken;
+    /**
+     * Holds both head and base SHAs resolved from the PR in a single API call.
+     */
+    public record PrShas(String headSha, String baseSha) {}
 
-    @Retry(name = "github")
-    @CircuitBreaker(name = "github", fallbackMethod = "fetchDiffFallback")
-    public String fetchDiff(String repoFullName, int prNumber) {
-        log.info("Fetching diff for {}/#{}", repoFullName, prNumber);
-        return gitHubRestClient.get()
+    /**
+     * Fetches the current head and base SHAs for a pull request in one API call.
+     * Callers should use the returned {@code headSha} as the immutable anchor for
+     * both the diff fetch and the {@code commit_id} in the published review.
+     */
+    @Retry(name = "github-read")
+    @CircuitBreaker(name = "github", fallbackMethod = "fetchPrShasFallback")
+    public PrShas fetchPrShas(String repoFullName, int prNumber) {
+        String json = gitHubRestClient.get()
                 .uri("/repos/{repo}/pulls/{pr}", repoFullName, prNumber)
-                .header("Authorization", "Bearer " + githubToken)
+                .header("Authorization", "Bearer " + credentialProvider.token())
+                .header("Accept", "application/vnd.github+json")
+                .retrieve()
+                .body(String.class);
+        try {
+            com.fasterxml.jackson.databind.JsonNode node =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+            String head = node.path("head").path("sha").asText(null);
+            String base = node.path("base").path("sha").asText(null);
+            if (head == null || head.isBlank()) {
+                throw new ReviewAgentException("GitHub PR response missing head.sha");
+            }
+            if (base == null || base.isBlank()) {
+                throw new ReviewAgentException("GitHub PR response missing base.sha");
+            }
+            return new PrShas(head, base);
+        } catch (ReviewAgentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ReviewAgentException("Could not parse SHAs from PR response", e);
+        }
+    }
+
+    /**
+     * Fetches an immutable diff for the exact {@code base...head} SHA range using
+     * the GitHub compare endpoint. The result is stable: identical SHAs always
+     * produce the same diff regardless of subsequent pushes to the PR branch.
+     */
+    @Retry(name = "github-read")
+    @CircuitBreaker(name = "github", fallbackMethod = "fetchDiffFallback")
+    public String fetchDiff(String repoFullName, String baseSha, String headSha) {
+        log.info("Fetching diff for {} {}...{}",
+                sanitize(repoFullName), sanitize(baseSha), sanitize(headSha));
+        return gitHubRestClient.get()
+                .uri("/repos/{repo}/compare/{base}...{head}", repoFullName, baseSha, headSha)
+                .header("Authorization", "Bearer " + credentialProvider.token())
                 .header("Accept", "application/vnd.github.diff")
                 .retrieve()
                 .body(String.class);
     }
 
-    public String fetchDiffFallback(String repoFullName, int prNumber, Throwable t) {
-        log.warn("GitHub API unavailable for {}/#{}: {}", repoFullName, prNumber, t.getMessage());
-        return "";
+    public PrShas fetchPrShasFallback(String repoFullName, int prNumber, Throwable t) {
+        throw new ReviewAgentException(
+                "GitHub API unavailable (PR SHAs) for " + repoFullName + "/#" + prNumber, t);
+    }
+
+    public String fetchDiffFallback(String repoFullName, String baseSha, String headSha, Throwable t) {
+        throw new ReviewAgentException(
+                "GitHub API unavailable (diff) for " + repoFullName, t);
     }
 
     /**
@@ -108,5 +161,10 @@ public class GitHubDiffTool {
         if (filename.endsWith(".sql"))        return "sql";
         if (filename.endsWith(".xml"))        return "xml";
         return "unknown";
+    }
+
+    private static String sanitize(String value) {
+        if (value == null) return "null";
+        return value.replace('\n', '_').replace('\r', '_');
     }
 }

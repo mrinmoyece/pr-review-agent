@@ -8,34 +8,36 @@
 
 ## What It Does
 
-The agent listens for GitHub `pull_request` webhook events (`opened`, `synchronize`, `reopened`) and automatically analyses the diff across four dimensions whenever a PR is opened or pushed to — no manual trigger needed:
+The agent listens for signed GitHub `pull_request` webhook events and runs
+deterministic checks followed by parallel specialist review rounds and an
+adversarial verification round.
 
 | Dimension | What It Checks |
 |-----------|---------------|
 | 🔒 Security | OWASP Top 10: SQL injection, weak crypto, hardcoded secrets, missing auth, unvalidated input |
 | 🏗️ Architecture | RestTemplate deprecation, missing circuit breakers, controller→repo coupling, @Transactional misuse |
 | ⚡ Performance | N+1 queries, unnecessary synchronisation, missing pagination, blocking I/O in reactive chains |
-| 🧠 LLM Review | Business logic correctness, edge cases, error handling gaps — what rules can't catch |
+| 🧠 Specialist review | Security, correctness, tests, architecture, performance, and operations |
+| 🔎 Verification | Challenges earlier findings and searches for high-impact misses |
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│       GitHub PR Event (opened / synchronize / reopened)  │
-└─────────────────────────┬────────────────────────────────┘
-                          │
-                          ▼
-┌──────────────────────────────────────────────────────────┐
-│                    PRReviewAgent                         │
-│                                                          │
-│  Tool 1: GitHubDiffTool    ── fetch & parse PR diff      │
-│  Tool 2: SecurityScanTool  ── OWASP pattern matching     │
-│  Tool 3: ArchCheckTool     ── Spring Boot patterns       │
-│  Tool 4: PerfAnalysisTool  ── N+1, sync, memory         │
-│  Tool 5: LLMReviewTool     ── context-aware holistic     │
-│  Tool 6: GitHubCommentTool ── post structured feedback   │
-└──────────────────────────────────────────────────────────┘
-```
+See [Architecture](docs/architecture.md) for system context, trust boundaries,
+component responsibilities, state, concurrency, failure semantics, and
+deployment topology.
+
+## AI System Design
+
+This project demonstrates bounded multi-agent orchestration, adversarial
+verification, untrusted-output validation, observable review rounds, and
+concurrency controls. See the [AI system design case study](docs/ai-system-design.md)
+for an evidence matrix and the design's explicit limitations.
+
+[Atlas](https://github.com/mrinmoyece/atlas) is the companion flagship for
+stateful graph execution, memory strategies, evaluation methodology, and
+performance benchmarking. Its
+[AI system design case study](https://github.com/mrinmoyece/atlas/blob/main/docs/ai-system-design.md)
+connects those capabilities to source and measured evidence.
 
 ## Review Output Example
 
@@ -66,13 +68,21 @@ and must be fixed before review can proceed.
 ```bash
 # Clone and configure
 git clone https://github.com/mrinmoyece/pr-review-agent
+cd pr-review-agent
 cp .env.example .env
-# Edit .env with your tokens
+# Set separate GitHub API and model credentials, a 32+ byte webhook secret,
+# GITHUB_REPOSITORY_ALLOWLIST, and a non-default GRAFANA_ADMIN_PASSWORD.
+set -a
+source .env
+set +a
 
-# Run (Azure OpenAI — production)
+# Start the required replay store
+docker compose up -d redis
+
+# Run (Azure OpenAI - production)
 ./gradlew bootRun
 
-# Run (GitHub Models — free dev mode)
+# Run (GitHub Models - free dev mode)
 ./gradlew bootRun --args="--spring.profiles.active=dev"
 ```
 
@@ -82,27 +92,64 @@ is configured to point at `/webhook/github`, every PR `opened`, `synchronize` (n
 or `reopened` event triggers a full review pipeline asynchronously, and the result is posted back
 as a GitHub PR review with inline comments.
 
-For local testing without wiring up a real webhook, use the manual trigger endpoint instead:
+The manual trigger is disabled by default. If explicitly enabled, it requires
+`X-Review-Trigger-Token` and still enforces the repository allowlist:
 ```bash
-curl -X POST "http://localhost:8080/webhook/trigger?repo=mrinmoyece/some-repo&pr=42"
+curl -X POST \
+  -H "X-Review-Trigger-Token: $REVIEW_MANUAL_TRIGGER_TOKEN" \
+  "http://localhost:8080/webhook/trigger?repo=mrinmoyece/some-repo&pr=42"
 ```
 
 ## Key Design Decisions
 
-**Static analysis before LLM** — Pattern matching runs first and is essentially instant. The LLM only runs on the remaining diff to catch nuanced issues the patterns missed. This reduces LLM token cost by ~50% on typical PRs while keeping coverage high.
+**Static analysis before LLM** — Fast deterministic checks seed six independent
+specialist passes. A seventh adversarial pass challenges the aggregate result.
+Every pass is bounded, auditable, and shown in the PR review. Failed or truncated
+coverage cannot produce an approval.
 
-**Score-based verdict** — Rather than a binary approve/reject, every review produces a 0–100 score. Teams can configure their own threshold: block merges below 70, warn below 85.
+**Untrusted by default** — PR content, history, ticket text, and model output are
+treated as untrusted. Findings are schema-validated and constrained to changed
+files. Repository access is default-deny, webhook deliveries are authenticated
+and deduplicated. Optional fix-candidate reporting never writes repository content.
 
-**Dual LLM support** — Azure OpenAI in CI/CD pipelines, GitHub Models for local dev and open source contributors.
+**Severity and completeness verdict** — Critical or high findings request
+changes; incomplete coverage and advisory findings produce a comment; only a
+complete review without findings approves. The 0-100 score summarizes severity
+but does not override those safety rules. See
+[Architecture](docs/architecture.md#verdict-semantics).
+
+**Dual LLM support** — Azure OpenAI for production deployments and GitHub Models
+for local development. Provider selection is explicit and fails closed when the
+selected provider is not configured.
 
 ## Tech Stack
 
 | Concern | Technology |
 |---------|-----------|
-| Framework | Spring Boot 3.4.6, Java 21 |
+| Framework | Spring Boot 3.5.16, Java 21 |
 | LLM | Azure OpenAI GPT-4o / GitHub Models |
-| Security Scanning | Custom OWASP pattern engine |
-| GitHub Integration | kohsuke/github-api + Webhooks |
+| Security Scanning | OWASP rules, CodeQL, dependency review, Gitleaks, Trivy |
+| GitHub Integration | GitHub REST API + signed webhooks + refreshing GitHub App credentials |
 | Resilience | Resilience4j |
 | Observability | Micrometer, Prometheus |
-| CI/CD | GitHub Actions + Semgrep + Snyk |
+| CI/CD | SHA-pinned GitHub Actions, CodeQL, OpenSSF Scorecard, SBOM/provenance |
+
+## Enterprise deployment
+
+See [Enterprise deployment](docs/enterprise-deployment.md) for least-privilege
+GitHub App permissions, required repository rulesets, secret management,
+network restrictions, and production rollout controls. See [SECURITY.md](SECURITY.md)
+for private vulnerability reporting.
+
+## Documentation
+
+The [documentation index](docs/README.md) is the canonical map:
+
+- [Architecture](docs/architecture.md)
+- [AI system design](docs/ai-system-design.md)
+- [Threat model](docs/threat-model.md)
+- [Evaluation](docs/evaluation.md)
+- [Operations and SLOs](docs/operations.md)
+- [Enterprise deployment](docs/enterprise-deployment.md)
+- [Architecture decisions](docs/adr/README.md)
+- [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)

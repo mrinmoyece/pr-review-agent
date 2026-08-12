@@ -4,6 +4,13 @@ spring:
   threads:
     virtual:
       enabled: true    # Java 21 virtual threads — improves throughput under load
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      connect-timeout: 2s
+      timeout: 2s
 
 server:
   port: 8080
@@ -20,20 +27,29 @@ azure:
 
 github:
   token: ${GITHUB_TOKEN:}
+  auth:
+    mode: ${GITHUB_AUTH_MODE:token}
+  app:
+    id: ${GITHUB_APP_ID:}
+    installation-id: ${GITHUB_APP_INSTALLATION_ID:}
+    private-key: ${GITHUB_APP_PRIVATE_KEY:}
+  repository-allowlist: ${GITHUB_REPOSITORY_ALLOWLIST:}
   webhook:
-    secret: ${GITHUB_WEBHOOK_SECRET:dev-secret-change-in-prod}
+    secret: ${GITHUB_WEBHOOK_SECRET:}
   models:
     endpoint: ${GITHUB_MODELS_ENDPOINT:https://models.inference.ai.azure.com}
+    token: ${GITHUB_MODELS_TOKEN:}
 
 # ── Resilience4j ─────────────────────────────────────────────────────────────
 resilience4j:
   retry:
     instances:
-      github:
+      github-read:
         max-attempts: 3
         wait-duration: 2s
         retry-exceptions:
           - org.springframework.web.client.RestClientResponseException
+          - org.springframework.web.client.ResourceAccessException
       llm:
         max-attempts: 3
         wait-duration: 5s
@@ -62,19 +78,28 @@ jira:
 
 # ── Review history ────────────────────────────────────────────────────────────
 review:
+  auto-fix:
+    enabled: ${REVIEW_AUTO_FIX_ENABLED:false}
+  webhook:
+    max-payload-bytes: ${REVIEW_MAX_WEBHOOK_BYTES:10485760}
+    delivery-retention: ${REVIEW_WEBHOOK_DELIVERY_RETENTION:24h}
+  manual-trigger:
+    enabled: ${REVIEW_MANUAL_TRIGGER_ENABLED:false}
+    token: ${REVIEW_MANUAL_TRIGGER_TOKEN:}
+  llm:
+    chunk-characters: ${REVIEW_LLM_CHUNK_CHARACTERS:24000}
+    max-diff-characters: ${REVIEW_LLM_MAX_DIFF_CHARACTERS:120000}
+    max-findings-per-pass: ${REVIEW_LLM_MAX_FINDINGS_PER_PASS:25}
+    max-chunks-per-pass: ${REVIEW_LLM_MAX_CHUNKS_PER_PASS:20}
+    verification-candidates-per-request: ${REVIEW_LLM_VERIFICATION_BATCH_SIZE:20}
   history:
     pr-count: ${REVIEW_HISTORY_PR_COUNT:20}
 
 # ── Async thread pool ──────────────────────────────────────────────────────
-spring.task.execution:
-  pool:
-    core-size: 4
-    max-size: 16
-    queue-capacity: 100
-  thread-name-prefix: pr-review-
-
 # ── Actuator ──────────────────────────────────────────────────────────────
 management:
+  server:
+    port: ${MANAGEMENT_PORT:9090}
   endpoints:
     web:
       exposure:
@@ -82,6 +107,9 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+      group:
+        readiness:
+          include: readinessState,redis
   metrics:
     tags:
       application: ${spring.application.name}

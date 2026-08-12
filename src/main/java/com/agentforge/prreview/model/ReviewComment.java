@@ -2,12 +2,14 @@ package com.agentforge.prreview.model;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.extern.jackson.Jacksonized;
 
 /**
  * A single review comment with severity, category, and optional inline line reference.
  */
 @Data
 @Builder
+@Jacksonized
 public class ReviewComment {
     private String filename;
     /** Optional: line number for inline GitHub PR comment */
