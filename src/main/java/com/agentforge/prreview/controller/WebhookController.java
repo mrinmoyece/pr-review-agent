@@ -142,8 +142,9 @@ public class WebhookController {
         if (prNumber < 1) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid PR number in payload"));
         }
-        if (deliveryId.isBlank() || !webhookDeliveryStore.recordIfNew(deliveryId)) {
-            log.warn("Duplicate or missing webhook delivery ID");
+        String replayKey = authenticatedReplayKey(payload);
+        if (deliveryId.isBlank() || !webhookDeliveryStore.recordIfNew(replayKey)) {
+            log.warn("Duplicate or missing webhook delivery");
             return ResponseEntity.status(409).body(Map.of("error", "Duplicate delivery"));
         }
 
@@ -157,12 +158,12 @@ public class WebhookController {
             future.whenComplete((result, failure) -> {
                 if (failure != null) {
                     log.error("Review failed for {}/#{}: {}",
-                            repo, prNumber, failure.getMessage(), failure);
-                    releaseFailedDelivery(deliveryId);
+                            repo, prNumber, sanitizeForLog(failure.getMessage()), failure);
+                    releaseFailedDelivery(replayKey, deliveryId);
                 }
             });
         } catch (RuntimeException e) {
-            releaseFailedDelivery(deliveryId);
+            releaseFailedDelivery(replayKey, deliveryId);
             throw e;
         }
 
@@ -239,12 +240,23 @@ public class WebhookController {
         return value.replaceAll("[\\r\\n\\t\\f\\u0000-\\u001F\\u007F]", "_");
     }
 
-    private void releaseFailedDelivery(String deliveryId) {
+    private String authenticatedReplayKey(String payload) {
         try {
-            webhookDeliveryStore.release(deliveryId);
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(payload.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    private void releaseFailedDelivery(String replayKey, String deliveryId) {
+        try {
+            webhookDeliveryStore.release(replayKey);
         } catch (RuntimeException releaseFailure) {
             log.error("Could not release failed webhook delivery {}: {}",
-                    sanitizeForLog(deliveryId), releaseFailure.getMessage(), releaseFailure);
+                    sanitizeForLog(deliveryId),
+                    sanitizeForLog(releaseFailure.getMessage()), releaseFailure);
         }
     }
 }

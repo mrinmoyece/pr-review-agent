@@ -71,7 +71,7 @@ git clone https://github.com/mrinmoyece/pr-review-agent
 cd pr-review-agent
 cp .env.example .env
 # Set separate GitHub API and model credentials, a 32+ byte webhook secret,
-# and GITHUB_REPOSITORY_ALLOWLIST.
+# GITHUB_REPOSITORY_ALLOWLIST, and a non-default GRAFANA_ADMIN_PASSWORD.
 
 # Start the required replay store
 docker compose up -d redis

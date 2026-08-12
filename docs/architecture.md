@@ -18,7 +18,7 @@ flowchart LR
     GH[GitHub] -->|signed webhook| APP[PR Review Agent]
     APP -->|diff, history, review API| GH
     APP -->|inference| MODEL[GitHub Models or Azure OpenAI]
-    APP -->|delivery replay state| REDIS[(Redis)]
+    APP -->|authenticated payload replay state| REDIS[(Redis)]
     APP -. optional ticket lookup .-> JIRA[Jira]
     PROM[Prometheus] -->|management port| APP
 ```
@@ -28,7 +28,7 @@ flowchart LR
 | GitHub webhook | `X-Hub-Signature-256` HMAC | Repository identity, PR metadata |
 | GitHub API | Least-privilege GitHub App token preferred | Diff, history, review output |
 | Model API | Separate inference credential | Bounded diff chunks and advisory context |
-| Redis | Network policy and optional password/TLS provided by deployment | Delivery IDs with expiry |
+| Redis | Network policy and optional password/TLS provided by deployment | Authenticated payload hashes with expiry |
 | Jira | Optional account and token | Ticket text and alignment result |
 | Management port | Internal network boundary | Health and metrics |
 
@@ -45,7 +45,7 @@ sequenceDiagram
 
     G->>W: signed pull_request event
     W->>W: size, signature, event, repo checks
-    W->>R: atomic delivery-ID reservation
+    W->>R: atomic authenticated-payload reservation
     R-->>W: accepted or duplicate
     W-->>G: 202, 409, or rejection
     W->>A: asynchronous review
@@ -60,10 +60,11 @@ sequenceDiagram
     A->>C: publish review
 ```
 
-The webhook acknowledges accepted work before review completion. GitHub delivery
-retries are deduplicated in Redis while work is active and after success. A
-failed asynchronous review releases its reservation so a GitHub redelivery can
-retry it; failure is never converted into an approval.
+The webhook acknowledges accepted work before review completion. Authenticated
+payload hashes are deduplicated in Redis while work is active and after success,
+so changing an unsigned delivery ID cannot bypass replay protection. A failed
+asynchronous review releases its reservation so GitHub can retry it; failure is
+never converted into an approval.
 
 ## Components
 
@@ -83,8 +84,8 @@ retry it; failure is never converted into an approval.
 
 - Review state lives in the asynchronous request lifecycle and is not resumable.
 - Every `ReviewRoundResult` records completeness and coverage metadata.
-- Delivery IDs are shared across replicas and expire after the configured
-  retention period.
+- Authenticated payload replay keys are shared across replicas and expire after
+  the configured retention period; delivery IDs remain sanitized log metadata.
 - Team patterns are cached in-process for one hour; they are advisory and may be
   recomputed after restart.
 - GitHub remains the source of truth for diffs, branches, and published reviews.

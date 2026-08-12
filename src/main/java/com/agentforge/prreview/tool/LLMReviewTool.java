@@ -11,6 +11,7 @@ import com.azure.ai.openai.models.ChatCompletions;
 import com.azure.ai.openai.models.ChatCompletionsOptions;
 import com.azure.ai.openai.models.ChatRequestSystemMessage;
 import com.azure.ai.openai.models.ChatRequestUserMessage;
+import com.azure.ai.openai.models.CompletionsFinishReason;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.retry.Retry;
@@ -111,12 +112,16 @@ public class LLMReviewTool {
                     .build();
         } catch (Exception e) {
             log.error("{} review pass failed: {}", pass, e.getMessage());
+            List<ReviewComment> partialFindings = validateAndDeduplicate(findings, changedFiles)
+                    .stream()
+                    .limit(maxFindingsPerPass)
+                    .toList();
             return ReviewRoundResult.builder()
                     .pass(pass)
                     .status(ReviewRoundResult.RoundStatus.FAILED)
                     .model(deployment)
                     .chunksReviewed(chunksReviewed)
-                    .comments(List.of())
+                    .comments(partialFindings)
                     .detail(e.getClass().getSimpleName() + ": " + safeMessage(e))
                     .build();
         }
@@ -189,7 +194,9 @@ public class LLMReviewTool {
     String requestCompletion(String deployment, ChatCompletionsOptions options) {
         ChatCompletions completions = openAIClient.getChatCompletions(deployment, options);
         if (completions.getChoices() == null || completions.getChoices().isEmpty()
-                || completions.getChoices().get(0).getMessage() == null) {
+                || completions.getChoices().get(0).getMessage() == null
+                || completions.getChoices().get(0).getFinishReason()
+                != CompletionsFinishReason.STOPPED) {
             throw new IllegalStateException("LLM returned no review response");
         }
         return completions.getChoices().get(0).getMessage().getContent();
@@ -427,7 +434,7 @@ public class LLMReviewTool {
             }
             if (!inHunk) {
                 truncated = true;
-                break;
+                continue;
             }
             if (current.length() > preamble.length()) {
                 if (chunks.size() >= maxChunksPerPass) {

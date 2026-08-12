@@ -7,7 +7,7 @@ Use Java 21 and the checked-in Gradle wrapper. Start with the
 ## Local development
 
 Copy `.env.example` to `.env`, provide non-production credentials, start Redis,
-and run the application:
+replace the example Grafana password, and run the application:
 
 ```bash
 docker compose up -d redis

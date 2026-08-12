@@ -41,7 +41,7 @@ flowchart LR
 | Threat | Primary controls | Residual risk |
 |---|---|---|
 | Forged webhook | HMAC verification, constant-time comparison, payload cap | Secret compromise permits forgery until rotation |
-| Replay or duplicate delivery | Required delivery ID, Redis atomic insert with expiry, failed-work release | Redis loss can reject legitimate events because processing fails closed |
+| Replay or duplicate delivery | HMAC validation followed by an expiring Redis reservation keyed by authenticated payload hash; failed-work release | Redis loss can reject legitimate events because processing fails closed |
 | Cross-repository abuse | Explicit repository allowlist | Misconfigured allowlist broadens scope |
 | Prompt injection | Random trust markers, system instructions, no model tool execution | A model can still produce plausible but incorrect findings |
 | Malformed or fabricated findings | JSON parsing, changed-file validation, added-line anchoring, length and count caps | General findings without a line still require human judgment |

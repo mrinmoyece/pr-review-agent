@@ -11,11 +11,14 @@ on restart.
 
 ## Decision
 
-Require a GitHub delivery ID and reserve it through Redis using an atomic insert
-with expiry. Every replica uses the same store. Retain the reservation while
-processing and after success; release it if asynchronous processing fails so a
-redelivery can retry transient failure. If reservation cannot be verified,
-reject processing rather than bypassing replay protection.
+Require a GitHub delivery ID as request metadata. After HMAC validation, derive a
+SHA-256 replay key from the authenticated payload and reserve that key through
+Redis using an atomic insert with expiry. This prevents reuse of a captured
+payload and signature with a substituted delivery ID. Every replica uses the same
+store. Retain the reservation while processing and after success; release it if
+asynchronous processing fails so a redelivery can retry transient failure. If
+reservation cannot be verified, reject processing rather than bypassing replay
+protection.
 
 ## Alternatives
 

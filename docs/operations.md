@@ -12,7 +12,7 @@ recommended initial production policy, not claims measured by this repository.
 | Webhook endpoint availability | 99.9% over 30 days | HTTP status and ingress metrics |
 | Accepted-to-published review latency | 95% within 10 minutes | Correlated application logs; custom histogram is future work |
 | Complete review rate | 99% excluding provider incidents and configured caps | Published round statuses |
-| Duplicate delivery suppression | 100% for retained delivery IDs | HTTP 409 and Redis state |
+| Authenticated payload replay suppression | 100% for retained replay keys | HTTP 409 and Redis state |
 | Review publication success | 99.5% of completed reviews | Application logs; custom counter is future work |
 
 Do not page on model-quality judgments. Page on availability, sustained backlog,
@@ -115,10 +115,11 @@ Security reports and disclosure follow [SECURITY.md](../SECURITY.md).
 ## Rollback
 
 Rollback to the last approved immutable image digest. Keep database/state
-compatibility in mind: delivery IDs in Redis are forward-compatible because they
-are opaque expiring keys. After rollback, verify readiness, metrics, repository
-allowlisting, replay rejection, and a non-production test PR before restoring
-normal traffic.
+compatibility in mind: replay keys in Redis are opaque and expiring. A rollback
+across the delivery-ID-to-payload-hash key transition temporarily loses prior
+deduplication state, so pause webhook traffic during that rollback. Afterward,
+verify readiness, metrics, repository allowlisting, replay rejection, and a
+non-production test PR before restoring normal traffic.
 
 ## Secret rotation
 

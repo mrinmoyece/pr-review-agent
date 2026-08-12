@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * Redis-backed delivery store shared by every replica and preserved across restarts.
+ * Redis-backed replay store shared by every replica and preserved across restarts.
  */
 @Component
 @RequiredArgsConstructor
@@ -22,14 +22,14 @@ public class RedisWebhookDeliveryStore implements WebhookDeliveryStore {
     private Duration deliveryRetention;
 
     @Override
-    public boolean recordIfNew(String deliveryId) {
+    public boolean recordIfNew(String replayKey) {
         Boolean inserted = redisTemplate.opsForValue()
-                .setIfAbsent(KEY_PREFIX + deliveryId, "processed", deliveryRetention);
+                .setIfAbsent(KEY_PREFIX + replayKey, "processed", deliveryRetention);
         return Boolean.TRUE.equals(inserted);
     }
 
     @Override
-    public void release(String deliveryId) {
-        redisTemplate.delete(KEY_PREFIX + deliveryId);
+    public void release(String replayKey) {
+        redisTemplate.delete(KEY_PREFIX + replayKey);
     }
 }

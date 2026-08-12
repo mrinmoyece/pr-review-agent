@@ -6,6 +6,10 @@ import com.agentforge.prreview.model.ReviewComment;
 import com.agentforge.prreview.model.ReviewPass;
 import com.agentforge.prreview.model.ReviewRoundResult;
 import com.azure.ai.openai.OpenAIClient;
+import com.azure.ai.openai.models.ChatChoice;
+import com.azure.ai.openai.models.ChatCompletions;
+import com.azure.ai.openai.models.ChatResponseMessage;
+import com.azure.ai.openai.models.CompletionsFinishReason;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.retry.RetryRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,13 +34,15 @@ class LLMReviewToolTest {
 
     private LLMReviewTool tool;
     private Environment environment;
+    private OpenAIClient openAIClient;
 
     @BeforeEach
     void setUp() {
         environment = mock(Environment.class);
+        openAIClient = mock(OpenAIClient.class);
         when(environment.getProperty(anyString(), anyString())).thenReturn("test-model");
         tool = spy(new LLMReviewTool(
-                mock(OpenAIClient.class),
+                openAIClient,
                 new ObjectMapper(),
                 environment,
                 RetryRegistry.ofDefaults()));
@@ -173,7 +179,11 @@ class LLMReviewToolTest {
     @Test
     void failureAfterFirstChunkReportsPartialCoverage() {
         ReflectionTestUtils.setField(tool, "chunkCharacters", 220);
-        doReturn("[]").doThrow(new IllegalStateException("provider failed"))
+        doReturn("""
+                [{"filename":"src/main/java/Foo.java","lineNumber":1,
+                  "category":"CORRECTNESS","severity":"HIGH",
+                  "title":"partial","body":"preserved","autoFixable":false}]
+                """).doThrow(new IllegalStateException("provider failed"))
                 .when(tool).requestCompletion(anyString(), any());
         String rawDiff = """
                 diff --git a/src/main/java/Foo.java b/src/main/java/Foo.java
@@ -200,6 +210,8 @@ class LLMReviewToolTest {
 
         assertThat(result.getStatus()).isEqualTo(ReviewRoundResult.RoundStatus.FAILED);
         assertThat(result.getChunksReviewed()).isEqualTo(1);
+        assertThat(result.getComments()).singleElement()
+                .extracting(ReviewComment::getTitle).isEqualTo("partial");
     }
 
     @Test
@@ -274,6 +286,41 @@ class LLMReviewToolTest {
 
         assertThat(result.getStatus()).isEqualTo(ReviewRoundResult.RoundStatus.TRUNCATED);
         assertThat(result.getChunksReviewed()).isZero();
+    }
+
+    @Test
+    void hunklessFileDoesNotPreventBestEffortTextReview() {
+        doReturn("[]").when(tool).requestCompletion(anyString(), any());
+
+        ReviewRoundResult result = tool.review(
+                ReviewPass.SECURITY,
+                List.of(
+                        DiffFile.builder()
+                                .filename("image.png")
+                                .rawDiff("Binary files a/image.png and b/image.png differ")
+                                .build(),
+                        diff("src/main/java/Foo.java")),
+                List.of(), "");
+
+        assertThat(result.getStatus()).isEqualTo(ReviewRoundResult.RoundStatus.TRUNCATED);
+        assertThat(result.getChunksReviewed()).isEqualTo(1);
+    }
+
+    @Test
+    void tokenLimitedCompletionIsRejected() {
+        ChatCompletions completions = mock(ChatCompletions.class);
+        ChatChoice choice = mock(ChatChoice.class);
+        ChatResponseMessage message = mock(ChatResponseMessage.class);
+        when(openAIClient.getChatCompletions(anyString(), any())).thenReturn(completions);
+        when(completions.getChoices()).thenReturn(List.of(choice));
+        when(choice.getMessage()).thenReturn(message);
+        when(choice.getFinishReason()).thenReturn(CompletionsFinishReason.TOKEN_LIMIT_REACHED);
+        when(message.getContent()).thenReturn("[]");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> tool.requestCompletion("test-model", mock(
+                                com.azure.ai.openai.models.ChatCompletionsOptions.class)))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test

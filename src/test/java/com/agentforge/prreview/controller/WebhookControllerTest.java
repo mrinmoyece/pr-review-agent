@@ -12,6 +12,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.concurrent.CompletableFuture;
 
@@ -62,11 +63,12 @@ class WebhookControllerTest {
     void duplicateDeliveryIsRejected() throws Exception {
         String payload = payload(REPOSITORY);
         String signature = signature(payload);
+        String replayKey = replayKey(payload);
 
         controller.handleGitHubWebhook("pull_request", signature, "delivery-2", payload);
-        when(deliveryStore.recordIfNew("delivery-2")).thenReturn(false);
+        when(deliveryStore.recordIfNew(replayKey)).thenReturn(false);
         var duplicate = controller.handleGitHubWebhook(
-                "pull_request", signature, "delivery-2", payload);
+                "pull_request", signature, "fresh-delivery-id", payload);
 
         assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
@@ -92,7 +94,7 @@ class WebhookControllerTest {
                 "pull_request", signature(payload), "delivery-failed", payload);
         failure.completeExceptionally(new IllegalStateException("provider unavailable"));
 
-        verify(deliveryStore).release("delivery-failed");
+        verify(deliveryStore).release(replayKey(payload));
     }
 
     @Test
@@ -137,5 +139,10 @@ class WebhookControllerTest {
         mac.init(new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
         return "sha256=" + HexFormat.of().formatHex(
                 mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private String replayKey(String payload) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(payload.getBytes(StandardCharsets.UTF_8)));
     }
 }

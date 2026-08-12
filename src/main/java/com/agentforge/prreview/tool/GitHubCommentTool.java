@@ -68,7 +68,7 @@ public class GitHubCommentTool {
                 "Failed to post review to GitHub " + repoFullName + "/#" + prNumber, t);
     }
 
-    private String buildReviewBody(ReviewResult result) {
+    String buildReviewBody(ReviewResult result) {
         StringBuilder sb = new StringBuilder();
         sb.append("## AgentForge PR Review\n\n");
         sb.append("**Verdict**: ").append(result.getVerdict()).append("\n");
@@ -80,13 +80,15 @@ public class GitHubCommentTool {
 
         if (result.getReviewRounds() != null && !result.getReviewRounds().isEmpty()) {
             sb.append("### Review Coverage\n\n");
-            sb.append("| Pass | Status | Model | Findings |\n");
-            sb.append("|---|---|---|---:|\n");
+            sb.append("| Pass | Status | Model | Chunks | Findings | Detail |\n");
+            sb.append("|---|---|---|---:|---:|---|\n");
             for (ReviewRoundResult round : result.getReviewRounds()) {
                 sb.append("| ").append(round.getPass())
                         .append(" | ").append(round.getStatus())
-                        .append(" | `").append(round.getModel()).append("`")
-                        .append(" | ").append(round.getComments().size()).append(" |\n");
+                        .append(" | `").append(escapeTableCell(round.getModel())).append("`")
+                        .append(" | ").append(round.getChunksReviewed())
+                        .append(" | ").append(round.getComments().size())
+                        .append(" | ").append(escapeTableCell(round.getDetail())).append(" |\n");
             }
             sb.append("\n");
         }
@@ -158,6 +160,16 @@ public class GitHubCommentTool {
         }
 
         return sb.toString();
+    }
+
+    private String escapeTableCell(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\")
+                .replace("|", "\\|")
+                .replace("\r", " ")
+                .replace("\n", "<br>");
     }
 
     private List<Map<String, Object>> buildInlineComments(List<ReviewComment> comments) {

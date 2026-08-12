@@ -36,9 +36,10 @@ verification runs after their aggregate is available. `ReviewRoundResult`
 records the pass, model, status, reviewed chunk count, findings, and incomplete
 reason. A failed, truncated, or capped round prevents approval.
 
-Webhook delivery state is separate from model state.
-`RedisWebhookDeliveryStore` uses an atomic, expiring insert so replay protection
-works across replicas and fails closed when Redis is unavailable. Team review
+Webhook replay state is separate from model state. After HMAC validation,
+`RedisWebhookDeliveryStore` atomically reserves an expiring hash of the
+authenticated payload, so a substituted unsigned delivery ID cannot bypass
+cross-replica replay protection. Redis failure remains fail closed. Team review
 patterns are advisory context cached per repository for one hour by
 `ReviewHistoryTool`; they are never treated as trusted instructions.
 
@@ -54,8 +55,8 @@ Evidence:
 
 The system combines deterministic controls with model-output validation:
 
-1. HMAC verification, payload limits, delivery IDs, and repository allowlisting
-   constrain the webhook boundary.
+1. HMAC verification, payload limits, authenticated-payload replay keys,
+   delivery metadata, and repository allowlisting constrain the webhook boundary.
 2. Static security, architecture, and performance checks provide deterministic
    evidence before model review.
 3. Every model request wraps attacker-controlled content in a randomized marker

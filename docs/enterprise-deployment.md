@@ -16,7 +16,7 @@ Set a random webhook secret of at least 32 bytes and configure
 `GITHUB_REPOSITORY_ALLOWLIST` explicitly. Store all credentials in a managed
 secret store and rotate them on a defined schedule.
 
-Provide a highly available Redis endpoint for webhook delivery idempotency.
+Provide a highly available Redis endpoint for authenticated webhook replay state.
 Every replica must use the same Redis deployment; webhook processing fails
 closed when the shared delivery store is unavailable.
 
@@ -92,7 +92,7 @@ fails to pull until deployment automation injects the reviewed release digest.
 
 - [ ] GitHub App is repository-scoped and uses short-lived installation tokens.
 - [ ] API and model credentials are separate and rotation-tested.
-- [ ] Webhook HMAC, delivery IDs, repository allowlist, and Redis fail-closed
+- [ ] Webhook HMAC, authenticated replay keys, delivery metadata, repository allowlist, and Redis fail-closed
       behavior are verified.
 - [ ] Management port is private and monitoring can scrape it.
 - [ ] Egress is limited to approved GitHub, model, Redis, DNS, telemetry, and

@@ -1,19 +1,19 @@
 package com.agentforge.prreview.security;
 
 /**
- * Shared idempotency boundary for GitHub webhook delivery IDs.
+ * Shared replay-protection boundary for authenticated webhook payload keys.
  */
 public interface WebhookDeliveryStore {
 
     /**
-     * Atomically records a delivery ID.
+     * Atomically records a replay key derived from a signature-validated payload.
      *
      * @return true only when the delivery ID was not already present
      */
-    boolean recordIfNew(String deliveryId);
+    boolean recordIfNew(String replayKey);
 
     /**
      * Releases a reservation after processing fails so GitHub can redeliver it.
      */
-    void release(String deliveryId);
+    void release(String replayKey);
 }
