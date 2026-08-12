@@ -25,7 +25,20 @@ public class WebhookPayloadLimitFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         return !"POST".equals(request.getMethod())
-                || !request.getRequestURI().equals(request.getContextPath() + "/webhook/github");
+                || !normalizedApplicationPath(request).equals("/webhook/github");
+    }
+
+    private String normalizedApplicationPath(HttpServletRequest request) {
+        String requestUri = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        String applicationPath = requestUri.startsWith(contextPath)
+                ? requestUri.substring(contextPath.length()) : requestUri;
+        return java.util.Arrays.stream(applicationPath.split("/", -1))
+                .map(segment -> {
+                    int matrixStart = segment.indexOf(';');
+                    return matrixStart >= 0 ? segment.substring(0, matrixStart) : segment;
+                })
+                .collect(java.util.stream.Collectors.joining("/"));
     }
 
     @Override

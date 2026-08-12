@@ -226,9 +226,14 @@ public class PRReviewAgent {
         for (ReviewComment comment : comments) {
             String key = (comment.getFilename() + "|" + comment.getLineNumber() + "|"
                     + comment.getCategory() + "|" + comment.getTitle()).toLowerCase(Locale.ROOT);
-            unique.putIfAbsent(key, comment);
+            unique.merge(key, comment, this::moreSevere);
         }
         return List.copyOf(unique.values());
+    }
+
+    private ReviewComment moreSevere(ReviewComment first, ReviewComment second) {
+        return first.getSeverity().ordinal() <= second.getSeverity().ordinal()
+                ? first : second;
     }
 
     private ReviewResult.SecuritySummary buildSecuritySummary(List<ReviewComment> comments) {

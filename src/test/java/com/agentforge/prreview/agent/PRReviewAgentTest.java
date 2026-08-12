@@ -34,12 +34,13 @@ class PRReviewAgentTest {
     private static final String REPOSITORY = "org/repo";
 
     private LLMReviewTool llmReviewTool;
+    private SecurityScanTool securityTool;
     private PRReviewAgent agent;
 
     @BeforeEach
     void setUp() {
         GitHubDiffTool diffTool = mock(GitHubDiffTool.class);
-        SecurityScanTool securityTool = mock(SecurityScanTool.class);
+        securityTool = mock(SecurityScanTool.class);
         ArchitectureCheckTool architectureTool = mock(ArchitectureCheckTool.class);
         PerformanceAnalysisTool performanceTool = mock(PerformanceAnalysisTool.class);
         llmReviewTool = mock(LLMReviewTool.class);
@@ -111,6 +112,28 @@ class PRReviewAgentTest {
 
         assertThat(result.isReviewComplete()).isFalse();
         assertThat(result.getComments()).containsExactly(candidate);
+        assertThat(result.getVerdict())
+                .isEqualTo(ReviewResult.ReviewVerdict.REQUEST_CHANGES);
+    }
+
+    @Test
+    void aggregateDeduplicationRetainsHighestSeverity() {
+        ReviewComment low = blockingComment();
+        low.setSeverity(ReviewComment.CommentSeverity.LOW);
+        ReviewComment high = blockingComment();
+        when(securityTool.scan(any())).thenReturn(List.of(low));
+        when(llmReviewTool.review(any(), any(), any(), anyString()))
+                .thenAnswer(invocation -> round(invocation.getArgument(0),
+                        ReviewRoundResult.RoundStatus.COMPLETE, List.of(high)));
+        when(llmReviewTool.verify(any(), any(), anyString()))
+                .thenReturn(verification(ReviewRoundResult.RoundStatus.COMPLETE,
+                        List.of(high)));
+
+        ReviewResult result = review();
+
+        assertThat(result.getComments()).singleElement()
+                .extracting(ReviewComment::getSeverity)
+                .isEqualTo(ReviewComment.CommentSeverity.HIGH);
         assertThat(result.getVerdict())
                 .isEqualTo(ReviewResult.ReviewVerdict.REQUEST_CHANGES);
     }

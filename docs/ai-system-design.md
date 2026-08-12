@@ -63,7 +63,8 @@ The system combines deterministic controls with model-output validation:
    and explicitly classifies it as data.
 4. Parsed findings must satisfy the output schema, target a changed file, and
    use an added diff line for an inline anchor. Model-provided write eligibility
-   and suggested fixes are discarded.
+   and suggested fixes are discarded. Equivalent findings retain the highest
+   observed severity rather than trusting model output order.
 5. Chunk size, chunk count, total-diff, output-token, and finding limits bound
    model work.
 6. Fix-candidate reporting is off by default. Trusted application policy can
@@ -75,7 +76,8 @@ The system combines deterministic controls with model-output validation:
    nothing; rejected claims cannot affect the verdict. Verification failure
    retains candidates as unverified risk and marks coverage incomplete.
    Candidate decisions are response-batched so valid aggregate volume cannot
-   silently exhaust one output-token budget.
+   silently exhaust one output-token budget. Later-batch failures preserve
+   validated discoveries and completed-request audit metadata.
 8. Incomplete model coverage can produce only `COMMENT`, never `APPROVE`.
 
 Evidence:

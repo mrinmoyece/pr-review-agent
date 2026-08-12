@@ -111,6 +111,27 @@ class LLMReviewToolTest {
     }
 
     @Test
+    void duplicateFindingRetainsHighestSeverity() {
+        doReturn("""
+                [
+                  {"filename":"src/main/java/Foo.java","lineNumber":1,"category":"CORRECTNESS",
+                   "severity":"LOW","title":"same","body":"low","autoFixable":false},
+                  {"filename":"src/main/java/Foo.java","lineNumber":1,"category":"CORRECTNESS",
+                   "severity":"HIGH","title":"same","body":"high","autoFixable":false}
+                ]
+                """).when(tool).requestCompletion(anyString(), any());
+
+        ReviewRoundResult result = tool.review(
+                ReviewPass.CORRECTNESS, List.of(diff("src/main/java/Foo.java")),
+                List.of(), "");
+
+        assertThat(result.getComments()).singleElement().satisfies(comment -> {
+            assertThat(comment.getSeverity()).isEqualTo(ReviewComment.CommentSeverity.HIGH);
+            assertThat(comment.getBody()).isEqualTo("high");
+        });
+    }
+
+    @Test
     void lineBoundedChunksRetainFileContext() {
         ReflectionTestUtils.setField(tool, "chunkCharacters", 220);
         doReturn("[]").when(tool).requestCompletion(anyString(), any());
@@ -286,6 +307,33 @@ class LLMReviewToolTest {
                 .isEqualTo(ReviewRoundResult.RoundStatus.COMPLETE);
         assertThat(result.getRound().getChunksReviewed()).isEqualTo(2);
         assertThat(result.getConfirmedComments()).containsExactly(first);
+    }
+
+    @Test
+    void laterVerificationFailureRetainsDiscoveriesAndProgress() throws Exception {
+        ReflectionTestUtils.setField(tool, "verificationCandidatesPerRequest", 1);
+        ReviewComment first = comment("first");
+        ReviewComment second = comment("second");
+        doReturn("""
+                {"decisions":[{"findingId":"%s","verdict":"REJECTED",
+                "reason":"unsupported"}],"newFindings":[{
+                "filename":"src/main/java/Foo.java","lineNumber":1,
+                "category":"SECURITY","severity":"HIGH",
+                "title":"discovered","body":"evidence","autoFixable":false}]}
+                """.formatted(findingId(first)))
+                .doThrow(new IllegalStateException("provider failed"))
+                .when(tool).requestCompletion(anyString(), any());
+
+        AdversarialVerificationResult result = tool.verify(
+                List.of(diff("src/main/java/Foo.java")),
+                List.of(first, second), "");
+
+        assertThat(result.getRound().getStatus())
+                .isEqualTo(ReviewRoundResult.RoundStatus.FAILED);
+        assertThat(result.getRound().getChunksReviewed()).isEqualTo(1);
+        assertThat(result.getRound().getComments()).singleElement()
+                .extracting(ReviewComment::getTitle).isEqualTo("discovered");
+        assertThat(result.getConfirmedComments()).containsExactly(first, second);
     }
 
     @Test

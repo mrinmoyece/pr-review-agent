@@ -213,6 +213,9 @@ public class LLMReviewTool {
                 defaultDeployment);
         Map<String, ReviewComment> findingsById = new LinkedHashMap<>();
         candidates.forEach(comment -> findingsById.put(findingId(comment), comment));
+        List<ReviewComment> confirmed = new ArrayList<>();
+        List<ReviewComment> discovered = new ArrayList<>();
+        int requests = 0;
         try {
             ChunkedDiff verificationDiff = chunkDiff(changedFiles);
             if (verificationDiff.truncated()) {
@@ -222,11 +225,8 @@ public class LLMReviewTool {
             }
             List<Map.Entry<String, ReviewComment>> entries =
                     new ArrayList<>(findingsById.entrySet());
-            List<ReviewComment> confirmed = new ArrayList<>();
-            List<ReviewComment> discovered = new ArrayList<>();
             int batchSize = Math.max(1, verificationCandidatesPerRequest);
             int start = 0;
-            int requests = 0;
             do {
                 int end = Math.min(start + batchSize, entries.size());
                 Map<String, ReviewComment> batch = new LinkedHashMap<>();
@@ -271,8 +271,10 @@ public class LLMReviewTool {
                     confirmed, limited, requests, detail);
         } catch (Exception e) {
             log.error("Adversarial verification failed: {}", e.getMessage());
+            List<ReviewComment> partialDiscoveries = validateAndDeduplicate(
+                    discovered, changedFiles).stream().limit(maxFindingsPerPass).toList();
             return verificationResult(deployment, ReviewRoundResult.RoundStatus.FAILED,
-                    candidates, List.of(), 0,
+                    candidates, partialDiscoveries, requests,
                     e.getClass().getSimpleName() + ": " + safeMessage(e));
         }
     }
@@ -408,9 +410,14 @@ public class LLMReviewTool {
             }
             String key = (comment.getFilename() + "|" + comment.getLineNumber() + "|"
                     + comment.getCategory() + "|" + comment.getTitle()).toLowerCase(Locale.ROOT);
-            unique.putIfAbsent(key, comment);
+            unique.merge(key, comment, this::moreSevere);
         }
         return List.copyOf(unique.values());
+    }
+
+    private ReviewComment moreSevere(ReviewComment first, ReviewComment second) {
+        return first.getSeverity().ordinal() <= second.getSeverity().ordinal()
+                ? first : second;
     }
 
     ChunkedDiff chunkDiff(List<DiffFile> changedFiles) {

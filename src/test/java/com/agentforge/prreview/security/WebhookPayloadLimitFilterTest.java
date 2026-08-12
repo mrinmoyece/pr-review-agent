@@ -58,6 +58,20 @@ class WebhookPayloadLimitFilterTest {
         assertThat(response.getStatus()).isEqualTo(413);
     }
 
+    @Test
+    void matrixParameterCannotBypassPayloadLimit() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/webhook/github;ignored");
+        request.setContent("123456".getBytes());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (ignoredRequest, ignoredResponse) -> {
+            throw new AssertionError("chain must not run");
+        });
+
+        assertThat(response.getStatus()).isEqualTo(413);
+    }
+
     private MockHttpServletRequest request(String content) throws IOException {
         MockHttpServletRequest request = new MockHttpServletRequest(
                 "POST", "/webhook/github");

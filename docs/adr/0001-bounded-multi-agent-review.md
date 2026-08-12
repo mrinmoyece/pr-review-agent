@@ -22,6 +22,9 @@ round's model, status, chunk count, details, and findings. Any failed, truncated
 or capped round prevents approval. Verify candidate decisions in bounded batches;
 only the first batch performs missed-finding discovery, preventing default-valid
 candidate volumes from overflowing one model response.
+If a later verification batch fails, retain all original candidates plus bounded,
+validated discoveries and the completed-request count. Deduplication retains the
+highest-severity duplicate so ordering cannot downgrade a blocking finding.
 
 ## Alternatives
 
