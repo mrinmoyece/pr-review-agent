@@ -21,7 +21,7 @@ jobs:
       - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
         with:
           egress-policy: audit
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
@@ -42,7 +42,7 @@ jobs:
       - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
         with:
           egress-policy: audit
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ossf/scorecard-action@62b2cac7ed8198b15735ed49ab1e5cf35480ba46 # v2.4.0
