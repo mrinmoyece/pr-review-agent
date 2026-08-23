@@ -53,7 +53,7 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-retry:$resilience4jVersion")
 
     implementation("com.fasterxml.jackson.core:jackson-databind")
-    implementation(platform("tools.jackson:jackson-bom:3.2.1"))
+    implementation(platform("tools.jackson:jackson-bom:3.2.2"))
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("com.github.ben-manes.caffeine:caffeine")
