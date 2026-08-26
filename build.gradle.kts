@@ -36,9 +36,10 @@ val azureOpenAiVersion = "1.0.0-beta.16"
 val resilience4jVersion = "2.4.0"
 extra["commons-lang3.version"] = "3.20.0"
 extra["jackson-bom.version"] = "2.21.5"
-// Netty: let Spring Boot BOM choose the managed version (removes the old pinned 4.1.136.Final).
-// log4j2: override to a patched release (CVE-2026-49844 is fixed in 2.25.0+).
-extra["log4j2.version"] = "2.25.0"
+// Netty 4.1.137.Final: fixes CVE-2026-59903 (CorsHandler Vary-header override).
+extra["netty.version"] = "4.1.137.Final"
+// log4j2 2.25.5: fixes CVE-2026-49844 (non-finite float JSON encoding).
+extra["log4j2.version"] = "2.25.5"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
