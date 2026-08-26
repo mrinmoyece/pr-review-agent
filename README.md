@@ -1,6 +1,6 @@
 # PR Review Agent 🔍
 
-> AI-powered pull request reviewer for Spring Boot / Java microservices. Detects security vulnerabilities, architecture violations, and performance issues — and posts structured feedback directly to your GitHub PRs.
+> Enterprise-grade AI PR review agent for any language or stack. Multi-agent parallel review (security, architecture, performance, testing) via GitHub webhooks — posts structured reports to any PR.
 
 [![CI](https://github.com/mrinmoyece/pr-review-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/mrinmoyece/pr-review-agent/actions)
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
@@ -86,19 +86,74 @@ docker compose up -d redis
 ./gradlew bootRun --args="--spring.profiles.active=dev"
 ```
 
-### How a Review Gets Triggered
-The review runs automatically — there is no manual command to type. Once the GitHub webhook
-is configured to point at `/webhook/github`, every PR `opened`, `synchronize` (new commits pushed),
-or `reopened` event triggers a full review pipeline asynchronously, and the result is posted back
-as a GitHub PR review with inline comments.
+### How Reviews Are Triggered
 
-The manual trigger is disabled by default. If explicitly enabled, it requires
-`X-Review-Trigger-Token` and still enforces the repository allowlist:
+Reviews can be triggered in two ways:
+
+---
+
+#### 1. Automated — GitHub Webhook (recommended)
+
+Configure a webhook on any repository you want reviewed. The agent reviews PRs in **any language or stack** — it works on the diff, not the compiled output.
+
+**Step 1 — Deploy the agent** (once):
 ```bash
+docker compose up -d          # starts the agent + Redis
+# or: ./gradlew bootRun for local dev
+```
+
+**Step 2 — Register the webhook** on each target repository:
+
+| Field | Value |
+|---|---|
+| Payload URL | `https://your-agent-host/webhook/github` |
+| Content type | `application/json` |
+| Secret | same value as `GITHUB_WEBHOOK_SECRET` in your `.env` |
+| Events | ✅ **Pull requests** only |
+| SSL | ✅ enabled (required in production) |
+
+Go to: `https://github.com/<owner>/<repo>/settings/hooks/new`
+
+**Step 3 — Add the repo to the allowlist** in your `.env`:
+```bash
+GITHUB_REPOSITORY_ALLOWLIST=owner/repo,owner/another-repo
+```
+
+Once configured, every PR `opened`, `synchronize` (new commits), or `reopened` event automatically triggers a full multi-agent review and posts the result back to the PR.
+
+---
+
+#### 2. Manual Trigger
+
+The manual trigger is disabled by default. Enable it in `.env`:
+```bash
+REVIEW_MANUAL_TRIGGER_ENABLED=true
+REVIEW_MANUAL_TRIGGER_TOKEN=<random 32+ byte secret>
+```
+
+Then call the trigger endpoint with the token and target PR:
+```bash
+# Trigger a review of PR #42 in any repo on your allowlist
 curl -X POST \
   -H "X-Review-Trigger-Token: $REVIEW_MANUAL_TRIGGER_TOKEN" \
-  "http://localhost:8080/webhook/trigger?repo=mrinmoyece/some-repo&pr=42"
+  "https://your-agent-host/webhook/trigger?repo=owner/repo&pr=42"
+
+# Response
+# {"status":"review_triggered","repo":"owner/repo","pr":"42"}
 ```
+
+The review runs asynchronously — the curl returns `202 Accepted` immediately and the structured report appears on the PR within seconds.
+
+> **Security note**: The manual trigger still enforces the repository allowlist and rate-limiting. It cannot review repos not explicitly in `GITHUB_REPOSITORY_ALLOWLIST`.
+
+---
+
+#### Supported repos
+
+The agent works with **any GitHub repository** regardless of language or build system:
+Python, TypeScript, Go, Rust, C#, Java, Terraform, Kubernetes YAML, shell scripts, etc.
+Only the repository must be on the `GITHUB_REPOSITORY_ALLOWLIST` and reachable by the agent's GitHub credentials.
+
 
 ## Key Design Decisions
 
