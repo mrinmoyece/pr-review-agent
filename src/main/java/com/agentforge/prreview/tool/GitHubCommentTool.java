@@ -53,7 +53,7 @@ public class GitHubCommentTool {
     @CircuitBreaker(name = "github", fallbackMethod = "postReviewFallback")
     public void postReview(String repoFullName, int prNumber, String headSha, ReviewResult result) {
         log.info("Posting review to {}/#{} — verdict={} comments={}",
-                repoFullName, prNumber, result.getVerdict(), result.getComments().size());
+                sanitizeLog(repoFullName), prNumber, result.getVerdict(), result.getComments().size());
 
         String event = switch (result.getVerdict()) {
             case APPROVE          -> "APPROVE";
@@ -77,7 +77,7 @@ public class GitHubCommentTool {
                 .retrieve()
                 .toBodilessEntity();
 
-        log.info("Review posted successfully to {}/#{}", repoFullName, prNumber);
+        log.info("Review posted successfully to {}/#{}", sanitizeLog(repoFullName), prNumber);
     }
 
     public void postReviewFallback(String repoFullName, int prNumber, String headSha,
@@ -413,5 +413,13 @@ public class GitHubCommentTool {
                 + " **" + safeText(c.getTitle()) + "**\n\n"
                 + safeText(c.getBody());
         // suggestedFix deliberately omitted — always null in production.
+    }
+
+    /** Strips CR/LF from a string before it enters a log statement (prevents log injection). */
+    static String sanitizeLog(String s) {
+        if (s == null) {
+            return "(null)";
+        }
+        return s.replace('\r', '_').replace('\n', '_');
     }
 }

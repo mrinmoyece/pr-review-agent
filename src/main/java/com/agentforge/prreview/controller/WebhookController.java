@@ -96,7 +96,7 @@ public class WebhookController {
         }
 
         if (!"pull_request".equals(event)) {
-            log.debug("Ignoring event type: {}", event);
+            log.debug("Ignoring event type: {}", sanitizeForLog(event));
             return ResponseEntity.ok(Map.of("status", "ignored", "event", event));
         }
 
@@ -122,7 +122,7 @@ public class WebhookController {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid payload"));
         }
         if (!allowedRepositories().contains(repo)) {
-            log.warn("Rejected webhook for repository outside allowlist: {}", repo);
+            log.warn("Rejected webhook for repository outside allowlist: {}", sanitizeForLog(repo));
             return ResponseEntity.status(403).body(Map.of("error", "Repository not allowed"));
         }
 
@@ -153,7 +153,7 @@ public class WebhookController {
             return ResponseEntity.status(409).body(Map.of("error", "Duplicate delivery"));
         }
 
-        log.info("PR {} #{} received - triggering review", repo, prNumber);
+        log.info("PR {} #{} received - triggering review", sanitizeForLog(repo), prNumber);
 
         try {
             CompletableFuture<ReviewResult> future = prReviewAgent.review(repo, prNumber,
@@ -192,7 +192,7 @@ public class WebhookController {
         if (!REPOSITORY_NAME.matcher(repo).matches() || !allowedRepositories().contains(repo) || pr < 1) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid repository or PR"));
         }
-        log.info("Manual review trigger for {}/#{}", repo, pr);
+        log.info("Manual review trigger for {}/#{}", sanitizeForLog(repo), pr);
         prReviewAgent.review(repo, pr, "", "", "", "");
         return ResponseEntity.accepted()
                 .body(Map.of("status", "review_triggered", "repo", repo, "pr", String.valueOf(pr)));
