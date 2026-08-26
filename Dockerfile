@@ -21,7 +21,11 @@ LABEL org.opencontainers.image.title="pr-review-agent"
 LABEL org.opencontainers.image.description="AI-powered GitHub PR review agent"
 LABEL org.opencontainers.image.vendor="AgentForge"
 
-RUN addgroup -g 1001 -S appgroup \
+# BUILD_DATE is injected by CI (github.run_id) to bust the Docker GHA layer cache
+# on every run, ensuring apk upgrade always installs the latest patched packages.
+ARG BUILD_DATE=unknown
+
+RUN echo "BUILD_DATE=$BUILD_DATE" && addgroup -g 1001 -S appgroup \
  && adduser -u 1001 -S -D -H -G appgroup appuser \
  && apk upgrade --no-cache \
  && apk add --no-cache curl
