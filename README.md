@@ -1,6 +1,6 @@
 # PR Review Agent 🔍
 
-> Enterprise-grade AI PR review agent for any language or stack. Multi-agent parallel review (security, architecture, performance, testing) via GitHub webhooks — posts structured reports to any PR.
+> Enterprise-grade AI PR review agent. Multi-agent parallel review (security, architecture, performance, testing) via GitHub webhooks — posts structured reports to any PR. LLM passes cover all languages; deterministic static-analysis passes target Java/Kotlin.
 
 [![CI](https://github.com/mrinmoyece/pr-review-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/mrinmoyece/pr-review-agent/actions)
 [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
@@ -94,7 +94,7 @@ Reviews can be triggered in two ways:
 
 #### 1. Automated — GitHub Webhook (recommended)
 
-Configure a webhook on any repository you want reviewed. The agent reviews PRs in **any language or stack** — it works on the diff, not the compiled output.
+Configure a webhook on any repository you want reviewed. LLM-based review passes (code quality, tests, docs) work on the diff and cover **any language or stack**. Deterministic static-analysis passes (security, architecture, performance) currently target **Java/Kotlin** only — other languages receive LLM-only coverage.
 
 **Step 1 — Deploy the agent** (once):
 ```bash
@@ -144,14 +144,13 @@ curl -X POST \
 
 The review runs asynchronously — the curl returns `202 Accepted` immediately and the structured report appears on the PR within seconds.
 
-> **Security note**: The manual trigger still enforces the repository allowlist and rate-limiting. It cannot review repos not explicitly in `GITHUB_REPOSITORY_ALLOWLIST`.
+> **Security note**: The manual trigger enforces the repository allowlist. It cannot review repos not explicitly in `GITHUB_REPOSITORY_ALLOWLIST`. Rate-limiting is not built-in — protect the endpoint with an ingress/reverse-proxy rate limiter (e.g. nginx `limit_req`) in production.
 
 ---
 
 #### Supported repos
 
-The agent works with **any GitHub repository** regardless of language or build system:
-Python, TypeScript, Go, Rust, C#, Java, Terraform, Kubernetes YAML, shell scripts, etc.
+The agent works with **any GitHub repository**. LLM review passes (code quality, tests, documentation) cover all languages. Deterministic static-analysis passes (security scanner, architecture checker, performance analyser) currently target **Java/Kotlin** — other stacks receive LLM-only coverage for those categories.
 Only the repository must be on the `GITHUB_REPOSITORY_ALLOWLIST` and reachable by the agent's GitHub credentials.
 
 
