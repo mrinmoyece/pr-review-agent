@@ -113,3 +113,9 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+review:
+  agent:
+    # Canonical source URL of this agent, used in review report attribution.
+    # Override when deploying a fork to point to your own repository.
+    repository-url: https://github.com/mrinmoyece/pr-review-agent
