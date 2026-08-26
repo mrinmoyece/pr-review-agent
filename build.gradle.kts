@@ -28,6 +28,26 @@ configurations {
     }
 }
 
+// ── Global CVE overrides (applies to ALL configurations incl. checkstyle, spotbugs, owasp) ──
+// Forces patched versions of transitive deps flagged by Dependabot / Trivy.
+configurations.all {
+    resolutionStrategy.eachDependency {
+        when ("${requested.group}:${requested.name}") {
+            // CVE-2026-54399, CVE-2026-54428 — Apache HttpComponents Core 5
+            "org.apache.httpcomponents.core5:httpcore5"    -> useVersion("5.4.3")
+            "org.apache.httpcomponents.core5:httpcore5-h2" -> useVersion("5.4.3")
+            // CVE-2026-64607 — Apache HttpClient 5
+            "org.apache.httpcomponents.client5:httpclient5" -> useVersion("5.6.3")
+            // CVE-2026-71497 — jsoup
+            "org.jsoup:jsoup"                              -> useVersion("1.23.1")
+            // CVE-2025-67030 — Plexus Utils
+            "org.codehaus.plexus:plexus-utils"             -> useVersion("3.6.1")
+            // CVE-2025-48734 — Commons BeanUtils
+            "commons-beanutils:commons-beanutils"          -> useVersion("1.11.0")
+        }
+    }
+}
+
 repositories {
     mavenCentral()
 }
