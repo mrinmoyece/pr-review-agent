@@ -1,5 +1,5 @@
 # ── Stage 1: Build ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-jammy@sha256:55fb9bf738f5d9b4a6c01b39337e3070d3e27370dd3c478fd1d5d3cd2233c6d8 AS builder
+FROM eclipse-temurin:25-jdk-jammy@sha256:f122992af75e61d87892f8a37c60f7cfa498b18748c1c9f8563da9a3b1893278 AS builder
 WORKDIR /build
 
 # Copy Gradle wrapper + build descriptor first (layer cache — deps only re-download if these change)
@@ -15,7 +15,7 @@ COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine@sha256:3f08b13888f595cc49edabea7250ba69499ba25602b267da591720769400e08c AS runtime
+FROM eclipse-temurin:25-jre-alpine@sha256:28db6fdf60e38945e43d840c0333aeaec66c15943070104f7586fd3c9d1665b0 AS runtime
 
 LABEL org.opencontainers.image.title="pr-review-agent"
 LABEL org.opencontainers.image.description="AI-powered GitHub PR review agent"
