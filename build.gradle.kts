@@ -24,7 +24,7 @@ configurations {
         extendsFrom(configurations.annotationProcessor.get())
     }
     named("spotbugs") {
-        resolutionStrategy.force("org.apache.commons:commons-lang3:3.20.0")
+        resolutionStrategy.force("org.apache.commons:commons-lang3:3.21.0")
     }
 }
 
@@ -54,7 +54,7 @@ repositories {
 
 val azureOpenAiVersion = "1.0.0-beta.16"
 val resilience4jVersion = "2.4.0"
-extra["commons-lang3.version"] = "3.20.0"
+extra["commons-lang3.version"] = "3.21.0"
 extra["jackson-bom.version"] = "2.21.5"
 // Netty 4.1.137.Final: fixes CVE-2026-59903 (CorsHandler Vary-header override).
 extra["netty.version"] = "4.1.137.Final"
